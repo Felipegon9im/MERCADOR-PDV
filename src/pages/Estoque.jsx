@@ -351,6 +351,44 @@ export default function Estoque() {
 
       </div>
 
+      {/* Category Quick Stats & Filter Badges */}
+      <div className="flex flex-wrap gap-2.5 animate-in fade-in duration-200">
+        <button
+          onClick={() => setSelectedCategory('')}
+          className={`flex items-center space-x-2.5 px-4 py-2.5 rounded-xl border text-xs font-bold transition-all duration-150 ${
+            selectedCategory === ''
+              ? 'bg-brand-accent/20 border-brand-accent text-white shadow-lg shadow-indigo-500/10'
+              : 'bg-brand-card/40 border-brand-border/50 text-gray-400 hover:bg-brand-border/10 hover:text-gray-300'
+          }`}
+        >
+          <span>📦 Todas as Categorias</span>
+          <span className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold ${selectedCategory === '' ? 'bg-brand-accent/30 text-white' : 'bg-brand-border text-gray-400'}`}>
+            R$ {products.reduce((sum, p) => sum + ((p.estoque_atual || 0) * (p.preco_custo || 0)), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </button>
+
+        {categories.map(cat => {
+          const val = getCategoryStockValue(cat.id);
+          const isSelected = selectedCategory === cat.id.toString();
+          return (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id.toString())}
+              className={`flex items-center space-x-2.5 px-4 py-2.5 rounded-xl border text-xs font-bold transition-all duration-150 ${
+                isSelected
+                  ? 'bg-brand-accent/20 border-brand-accent text-white shadow-lg shadow-indigo-500/10'
+                  : 'bg-brand-card/40 border-brand-border/50 text-gray-400 hover:bg-brand-border/10 hover:text-gray-300'
+              }`}
+            >
+              <span>📁 {cat.nome}</span>
+              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold ${isSelected ? 'bg-brand-accent/30 text-white' : 'bg-brand-border text-gray-400'}`}>
+                R$ {val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Products Directory Table */}
       <div className="rounded-2xl border border-brand-border/50 bg-brand-card/30 overflow-hidden">
         <table className="w-full border-collapse text-left">
