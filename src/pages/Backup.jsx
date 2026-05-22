@@ -9,7 +9,11 @@ import {
   FileSpreadsheet, 
   CheckCircle,
   Plus,
-  X
+  X,
+  GitBranch,
+  ArrowUpCircle,
+  AlertCircle,
+  Check
 } from 'lucide-react';
 
 export default function Backup() {
@@ -18,6 +22,15 @@ export default function Backup() {
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Módulo de atualizações
+  const [systemDetails, setSystemDetails] = useState({ version: '1.0.0', isPackaged: false, hasGit: false });
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState('idle'); // 'idle' | 'checking' | 'up-to-date' | 'new-version' | 'error'
+  const [onlineVersion, setOnlineVersion] = useState('');
+  const [downloading, setDownloading] = useState(false);
+  const [downloadPercent, setDownloadPercent] = useState(0);
+  const [gitPulling, setGitPulling] = useState(false);
 
   // User form states
   const [showUserModal, setShowUserModal] = useState(false);
@@ -42,9 +55,110 @@ export default function Backup() {
     }
   };
 
+  const loadSystemDetails = async () => {
+    if (window.api && window.api.updater) {
+      const details = await window.api.updater.getDetails();
+      setSystemDetails(details);
+    }
+  };
+
   useEffect(() => {
     loadData();
+    loadSystemDetails();
   }, []);
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateStatus('checking');
+    setSuccessMsg('');
+    setErrorMsg('');
+    
+    try {
+      // Fetch online package.json from the user's Github repository
+      const response = await fetch('https://raw.githubusercontent.com/Felipegon9im/MERCADOR-PDV/main/package.json');
+      if (!response.ok) {
+        throw new Error(`Erro HTTP: ${response.status}`);
+      }
+      const data = await response.json();
+      const onlineVer = data.version || '1.0.0';
+      setOnlineVersion(onlineVer);
+      
+      // Compare versions
+      const localVer = systemDetails.version;
+      const isNewer = isNewerVersion(localVer, onlineVer);
+      
+      if (isNewer) {
+        setUpdateStatus('new-version');
+      } else {
+        setUpdateStatus('up-to-date');
+      }
+    } catch (err) {
+      console.error("Error checking updates:", err);
+      setUpdateStatus('error');
+      setErrorMsg("Não foi possível verificar atualizações. Verifique sua conexão de internet.");
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const isNewerVersion = (local, online) => {
+    const l = local.replace('v', '').split('.').map(Number);
+    const o = online.replace('v', '').split('.').map(Number);
+    for (let i = 0; i < Math.max(l.length, o.length); i++) {
+      const lVal = l[i] || 0;
+      const oVal = o[i] || 0;
+      if (oVal > lVal) return true;
+      if (lVal > oVal) return false;
+    }
+    return false;
+  };
+
+  const handleGitPull = async () => {
+    setGitPulling(true);
+    setSuccessMsg('');
+    setErrorMsg('');
+    try {
+      const res = await window.api.updater.execGitPull();
+      if (res.success) {
+        setSuccessMsg("Repositório atualizado com sucesso via Git Pull! Reinicie a aplicação para aplicar as mudanças de código.");
+        setUpdateStatus('up-to-date');
+        loadSystemDetails();
+      } else {
+        setErrorMsg("Erro no Git Pull: " + res.message);
+      }
+    } catch (err) {
+      setErrorMsg("Falha ao executar Git Pull: " + err.message);
+    } finally {
+      setGitPulling(false);
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    setDownloading(true);
+    setDownloadPercent(0);
+    setSuccessMsg('');
+    setErrorMsg('');
+    
+    let cleanup = () => {};
+    try {
+      if (window.api && window.api.updater) {
+        cleanup = window.api.updater.onDownloadProgress((percent) => {
+          setDownloadPercent(percent);
+        });
+        
+        const res = await window.api.updater.downloadAndInstall(onlineVersion);
+        if (!res.success) {
+          setErrorMsg("Erro ao baixar atualização: " + res.message);
+          setDownloading(false);
+        }
+      }
+    } catch (err) {
+      setErrorMsg("Erro durante o processo de atualização: " + err.message);
+      setDownloading(false);
+    } finally {
+      cleanup();
+    }
+  };
 
   const handleExportBackup = async () => {
     setLoading(true);
@@ -189,32 +303,172 @@ export default function Backup() {
           </button>
         </div>
 
-        {/* Global info card */}
-        <div className="glass-panel rounded-3xl p-6 border border-white/5 flex flex-col justify-between h-56">
+        {/* Painel de Atualizações do Sistema (Premium) */}
+        <div className="glass-panel rounded-3xl p-6 border border-white/5 flex flex-col justify-between h-56 min-h-[224px]">
           <div>
-            <span className="text-[10px] text-gray-500 font-extrabold uppercase tracking-widest flex items-center space-x-1.5">
-              <Settings size={12} className="text-brand-success" />
-              <span>Status Operacional</span>
-            </span>
-            
-            <div className="space-y-2 mt-4 text-xs font-semibold text-gray-300">
-              <div className="flex justify-between">
-                <span>Versão PDV:</span>
-                <span className="text-white">v1.0.0 (Windows)</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Servidor local:</span>
-                <span className="text-brand-success">Ativo (SQLite3)</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Total Operadores:</span>
-                <span className="text-white">{users.length} cadastrados</span>
-              </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] text-gray-500 font-extrabold uppercase tracking-widest flex items-center space-x-1.5">
+                <Settings size={12} className="text-brand-success" />
+                <span>Atualização do Sistema</span>
+              </span>
+              <span className="text-[10px] bg-brand-border/60 text-gray-300 font-bold px-2 py-0.5 rounded border border-brand-border">
+                v{systemDetails.version}
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {updateStatus === 'idle' && (
+                <p className="text-xs text-gray-400 font-medium leading-relaxed">
+                  Verifique se há novas melhorias ou correções disponíveis para o sistema no repositório GitHub.
+                </p>
+              )}
+
+              {updateStatus === 'checking' && (
+                <div className="flex items-center space-x-2.5 text-xs text-gray-300 font-semibold py-1">
+                  <RefreshCcw size={14} className="animate-spin text-brand-accent" />
+                  <span>Buscando novidades no GitHub...</span>
+                </div>
+              )}
+
+              {updateStatus === 'up-to-date' && (
+                <div className="space-y-2 py-1">
+                  <div className="flex items-center space-x-2 text-xs text-brand-success font-bold">
+                    <CheckCircle size={15} />
+                    <span>Sistema Atualizado!</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-semibold leading-relaxed">
+                    Você está utilizando a versão mais recente do MercadoPDV.
+                  </p>
+                </div>
+              )}
+
+              {updateStatus === 'new-version' && (
+                <div className="space-y-2 py-1">
+                  <div className="flex items-center space-x-2 text-xs text-brand-warning font-extrabold">
+                    <ArrowUpCircle size={15} className="animate-bounce" />
+                    <span>Nova Versão v{onlineVersion} Disponível!</span>
+                  </div>
+                  <p className="text-[11px] text-gray-400 font-medium leading-relaxed">
+                    Há atualizações prontas para baixar. {systemDetails.hasGit ? 'Você pode puxar diretamente via Git.' : 'O sistema baixará o instalador e atualizará.'}
+                  </p>
+                </div>
+              )}
+
+              {updateStatus === 'error' && (
+                <div className="space-y-2 py-1">
+                  <div className="flex items-center space-x-2 text-xs text-brand-danger font-bold">
+                    <AlertCircle size={15} />
+                    <span>Falha na Conexão</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-medium">
+                    Não foi possível conectar ao servidor do GitHub para verificar as atualizações.
+                  </p>
+                </div>
+              )}
+
+              {/* Barra de Progresso do Download */}
+              {downloading && (
+                <div className="space-y-2 pt-1.5">
+                  <div className="flex justify-between text-[10px] font-bold text-gray-400">
+                    <span>Baixando instalador setup...</span>
+                    <span>{downloadPercent}%</span>
+                  </div>
+                  <div className="w-full bg-brand-dark rounded-full h-2 overflow-hidden border border-brand-border">
+                    <div 
+                      className="bg-gradient-to-r from-brand-accent to-pink-500 h-full transition-all duration-300"
+                      style={{ width: `${downloadPercent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider text-center border-t border-brand-border/40 pt-3">
-            Modo 100% Offline-First
+          <div className="mt-4">
+            {/* Botões de Ação Dinâmicos */}
+            {!downloading && !gitPulling && (
+              <>
+                {updateStatus === 'idle' && (
+                  <button
+                    onClick={handleCheckUpdate}
+                    disabled={checkingUpdate}
+                    className="w-full py-2.5 bg-brand-accent hover:bg-brand-accentHover text-white font-bold text-xs uppercase rounded-xl transition-colors shadow-lg shadow-indigo-500/10 flex items-center justify-center space-x-2"
+                  >
+                    <RefreshCcw size={12} className={checkingUpdate ? "animate-spin" : ""} />
+                    <span>Verificar Atualizações</span>
+                  </button>
+                )}
+
+                {updateStatus === 'checking' && (
+                  <button
+                    disabled
+                    className="w-full py-2.5 bg-brand-border text-gray-500 font-bold text-xs uppercase rounded-xl cursor-not-allowed flex items-center justify-center space-x-2"
+                  >
+                    <RefreshCcw size={12} className="animate-spin" />
+                    <span>Buscando...</span>
+                  </button>
+                )}
+
+                {updateStatus === 'up-to-date' && (
+                  <button
+                    onClick={handleCheckUpdate}
+                    className="w-full py-2.5 bg-brand-border hover:bg-brand-border/80 text-gray-300 font-bold text-xs uppercase rounded-xl transition-colors flex items-center justify-center space-x-2"
+                  >
+                    <RefreshCcw size={12} />
+                    <span>Verificar Novamente</span>
+                  </button>
+                )}
+
+                {updateStatus === 'new-version' && (
+                  systemDetails.hasGit ? (
+                    <button
+                      onClick={handleGitPull}
+                      className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase rounded-xl transition-colors flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/10"
+                    >
+                      <GitBranch size={13} />
+                      <span>Puxar Código (Git Pull)</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleInstallUpdate}
+                      className="w-full py-2.5 bg-gradient-to-r from-brand-accent to-pink-500 hover:from-brand-accentHover hover:to-pink-600 text-white font-bold text-xs uppercase rounded-xl transition-all flex items-center justify-center space-x-2 shadow-lg shadow-indigo-500/10"
+                    >
+                      <ArrowUpCircle size={13} className="animate-bounce" />
+                      <span>Baixar e Instalar v{onlineVersion}</span>
+                    </button>
+                  )
+                )}
+
+                {updateStatus === 'error' && (
+                  <button
+                    onClick={handleCheckUpdate}
+                    className="w-full py-2.5 bg-brand-accent hover:bg-brand-accentHover text-white font-bold text-xs uppercase rounded-xl transition-colors flex items-center justify-center space-x-2"
+                  >
+                    <RefreshCcw size={12} />
+                    <span>Tentar Novamente</span>
+                  </button>
+                )}
+              </>
+            )}
+
+            {gitPulling && (
+              <button
+                disabled
+                className="w-full py-2.5 bg-brand-border text-gray-500 font-bold text-xs uppercase rounded-xl cursor-not-allowed flex items-center justify-center space-x-2"
+              >
+                <RefreshCcw size={12} className="animate-spin" />
+                <span>Atualizando via Git...</span>
+              </button>
+            )}
+
+            {downloading && (
+              <button
+                disabled
+                className="w-full py-2.5 bg-brand-border text-brand-accent font-bold text-xs uppercase rounded-xl cursor-not-allowed flex items-center justify-center space-x-2 animate-pulse"
+              >
+                <span>Baixando ({downloadPercent}%)</span>
+              </button>
+            )}
           </div>
         </div>
 

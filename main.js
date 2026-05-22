@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { exec, spawn } = require('child_process');
+const https = require('https');
 const dbService = require('./database');
 
 let mainWindow;
@@ -382,6 +384,114 @@ app.whenReady().then(() => {
       }
     }
     return { success: false, message: 'Operação cancelada' };
+  });
+
+  // ========================================================
+  // CANAIS IPC: MÓDULO DE ATUALIZAÇÃO AUTOMATIZADA
+  // ========================================================
+  ipcMain.handle('updater:getDetails', async () => {
+    try {
+      const pjsonPath = path.join(app.getAppPath(), 'package.json');
+      let localVersion = '1.0.0';
+      if (fs.existsSync(pjsonPath)) {
+        const pjson = JSON.parse(fs.readFileSync(pjsonPath, 'utf8'));
+        localVersion = pjson.version || '1.0.0';
+      }
+      
+      const gitDir = path.join(app.getAppPath(), '.git');
+      const hasGit = fs.existsSync(gitDir);
+      
+      return {
+        version: localVersion,
+        isPackaged: app.isPackaged,
+        hasGit: hasGit
+      };
+    } catch (err) {
+      console.error("Error in updater:getDetails:", err);
+      return { version: '1.0.0', isPackaged: false, hasGit: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('updater:execGitPull', async () => {
+    return new Promise((resolve) => {
+      exec('git pull', { cwd: app.getAppPath() }, (error, stdout, stderr) => {
+        if (error) {
+          resolve({ success: false, message: error.message || stderr });
+        } else {
+          resolve({ success: true, output: stdout });
+        }
+      });
+    });
+  });
+
+  ipcMain.handle('updater:downloadAndInstall', async (event, onlineVersion) => {
+    const tempDir = app.getPath('temp');
+    const tempFilePath = path.join(tempDir, `MercadoPDV_Setup_${onlineVersion}.exe`);
+    const downloadUrl = `https://github.com/Felipegon9im/MERCADOR-PDV/raw/main/release/MercadoPDV%20Setup%20${onlineVersion}.exe`;
+    
+    const download = (url, destPath) => {
+      return new Promise((resolve, reject) => {
+        const request = (currentUrl) => {
+          https.get(currentUrl, (response) => {
+            if (response.statusCode === 302 || response.statusCode === 301) {
+              request(response.headers.location);
+              return;
+            }
+            
+            if (response.statusCode !== 200) {
+              reject(new Error(`Servidor retornou status HTTP ${response.statusCode}`));
+              return;
+            }
+            
+            const totalSize = parseInt(response.headers['content-length'], 10);
+            let downloadedSize = 0;
+            
+            const fileStream = fs.createWriteStream(destPath);
+            response.pipe(fileStream);
+            
+            response.on('data', (chunk) => {
+              downloadedSize += chunk.length;
+              if (totalSize && mainWindow) {
+                const percent = Math.round((downloadedSize / totalSize) * 100);
+                mainWindow.webContents.send('updater:downloadProgress', percent);
+              }
+            });
+            
+            fileStream.on('finish', () => {
+              fileStream.close();
+              resolve();
+            });
+            
+            fileStream.on('error', (err) => {
+              fs.unlink(destPath, () => {});
+              reject(err);
+            });
+          }).on('error', reject);
+        };
+        request(url);
+      });
+    };
+    
+    try {
+      await download(downloadUrl, tempFilePath);
+      
+      // Launch setup
+      const child = spawn(tempFilePath, [], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+      
+      // Close application to avoid write locks during upgrade
+      setTimeout(() => {
+        app.quit();
+      }, 500);
+      
+      return { success: true };
+    } catch (err) {
+      console.error("Error in updater:downloadAndInstall:", err);
+      return { success: false, message: err.message };
+    }
   });
 
   createWindow();

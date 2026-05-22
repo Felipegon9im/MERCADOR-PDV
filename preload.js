@@ -51,5 +51,19 @@ contextBridge.exposeInMainWorld('api', {
   backup: {
     exportarBanco: () => ipcRenderer.invoke('backup:exportar'),
     restaurarBanco: () => ipcRenderer.invoke('backup:restaurar')
+  },
+  
+  // Módulo de Atualizações (GitHub)
+  updater: {
+    getDetails: () => ipcRenderer.invoke('updater:getDetails'),
+    execGitPull: () => ipcRenderer.invoke('updater:execGitPull'),
+    downloadAndInstall: (onlineVersion) => ipcRenderer.invoke('updater:downloadAndInstall', onlineVersion),
+    onDownloadProgress: (callback) => {
+      const subscription = (event, percent) => callback(percent);
+      ipcRenderer.on('updater:downloadProgress', subscription);
+      return () => {
+        ipcRenderer.removeListener('updater:downloadProgress', subscription);
+      };
+    }
   }
 });
