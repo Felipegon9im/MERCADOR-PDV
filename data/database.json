@@ -1,0 +1,238 @@
+{
+  "usuarios": [
+    {
+      "id": 1,
+      "username": "admin",
+      "password": "87fbd3a9af0a5f72f55a948c67a5b1fe85ce85ba42c59eba1c5acf77b89a54f630eb5ae8742898881d7b89b4d9dd28582add03ff719b9ea481cf76cd6f3aaec6",
+      "role": "admin",
+      "name": "Administrador",
+      "active": 1,
+      "created_at": "2026-05-20T08:27:48.453Z"
+    },
+    {
+      "id": 2,
+      "username": "gerente",
+      "password": "b8b9c9a992c7898dae729e369d45aed3505fba244e4ec581f2aa30636c075a448d22af804e17e2659769383f509a8dd63ad092b8079ac211590803809bfcd7d1",
+      "role": "gerente",
+      "name": "Gerente Geral",
+      "active": 1,
+      "created_at": "2026-05-20T08:27:48.455Z"
+    },
+    {
+      "id": 3,
+      "username": "caixa",
+      "password": "bb0bcdbac4232e88b70b3093c7acc6edf227c1e3ddbf5ef5976ce0a6c1792e41be9c36403b16c16e78642e33455767ed4c00bf3cf2586cf1459f3c9080a58983",
+      "role": "operador",
+      "name": "Operador Caixa",
+      "active": 1,
+      "created_at": "2026-05-20T08:27:48.456Z"
+    }
+  ],
+  "categorias": [
+    {
+      "id": 1,
+      "nome": "Mercearia",
+      "created_at": "2026-05-20T08:27:48.456Z"
+    },
+    {
+      "id": 2,
+      "nome": "Bebidas",
+      "created_at": "2026-05-20T08:27:48.456Z"
+    },
+    {
+      "id": 3,
+      "nome": "Frios e Laticínios",
+      "created_at": "2026-05-20T08:27:48.456Z"
+    },
+    {
+      "id": 4,
+      "nome": "Higiene e Limpeza",
+      "created_at": "2026-05-20T08:27:48.456Z"
+    },
+    {
+      "id": 5,
+      "nome": "Hortifruti",
+      "created_at": "2026-05-20T08:27:48.456Z"
+    }
+  ],
+  "produtos": [
+    {
+      "id": 1,
+      "codigo_barras": "7891000100101",
+      "nome": "Coca-Cola Lata 350ml",
+      "categoria_id": 2,
+      "preco_custo": 2.2,
+      "preco_venda": 4.5,
+      "estoque_atual": 47,
+      "estoque_minimo": 10,
+      "created_at": "2026-05-20T08:27:48.456Z"
+    },
+    {
+      "id": 2,
+      "codigo_barras": "7891000100102",
+      "nome": "Cerveja Heineken Long Neck 330ml",
+      "categoria_id": 2,
+      "preco_custo": 4.5,
+      "preco_venda": 8.9,
+      "estoque_atual": 19,
+      "estoque_minimo": 6,
+      "created_at": "2026-05-20T08:27:48.456Z"
+    },
+    {
+      "id": 3,
+      "codigo_barras": "7892000200201",
+      "nome": "Arroz Tio João Tipo 1 5kg",
+      "categoria_id": 1,
+      "preco_custo": 18.9,
+      "preco_venda": 29.9,
+      "estoque_atual": 15,
+      "estoque_minimo": 5,
+      "created_at": "2026-05-20T08:27:48.456Z"
+    },
+    {
+      "id": 4,
+      "codigo_barras": "7892000200202",
+      "nome": "Feijão Carioca Kicaldo 1kg",
+      "categoria_id": 1,
+      "preco_custo": 5.2,
+      "preco_venda": 8.5,
+      "estoque_atual": 20,
+      "estoque_minimo": 5,
+      "created_at": "2026-05-20T08:27:48.456Z"
+    },
+    {
+      "id": 5,
+      "codigo_barras": "7893000300301",
+      "nome": "Leite Integral Piracanjuba 1L",
+      "categoria_id": 3,
+      "preco_custo": 3.8,
+      "preco_venda": 5.49,
+      "estoque_atual": 30,
+      "estoque_minimo": 8,
+      "created_at": "2026-05-20T08:27:48.456Z"
+    }
+  ],
+  "vendas": [
+    {
+      "id": 1,
+      "usuario_id": 3,
+      "total": 4.5,
+      "desconto": 0,
+      "subtotal": 4.5,
+      "forma_pagamento": "dinheiro",
+      "troco": 5.5,
+      "pago": 10,
+      "data_venda": "2026-05-20T08:34:47.961Z"
+    },
+    {
+      "id": 2,
+      "usuario_id": 3,
+      "total": 44.5,
+      "desconto": 0,
+      "subtotal": 44.5,
+      "forma_pagamento": "pix",
+      "troco": 0,
+      "pago": 44.5,
+      "data_venda": "2026-05-20T08:47:55.572Z"
+    }
+  ],
+  "itens_venda": [
+    {
+      "id": 1,
+      "venda_id": 1,
+      "produto_id": 1,
+      "quantidade": 1,
+      "preco_unitario": 4.5,
+      "total_item": 4.5
+    },
+    {
+      "id": 2,
+      "venda_id": 2,
+      "produto_id": 2,
+      "quantidade": 5,
+      "preco_unitario": 8.9,
+      "total_item": 44.5
+    }
+  ],
+  "estoque_movimentacoes": [
+    {
+      "id": 1,
+      "produto_id": 1,
+      "quantidade": -1,
+      "tipo": "saida",
+      "motivo": "Venda #1",
+      "usuario_id": 3,
+      "data_movimentacao": "2026-05-20T08:34:47.961Z"
+    },
+    {
+      "id": 2,
+      "produto_id": 2,
+      "quantidade": -5,
+      "tipo": "saida",
+      "motivo": "Venda #2",
+      "usuario_id": 3,
+      "data_movimentacao": "2026-05-20T08:47:55.572Z"
+    }
+  ],
+  "fornecedores": [],
+  "notas_entrada": [],
+  "notas_itens": [],
+  "logs_acoes": [
+    {
+      "id": 1,
+      "usuario_id": 1,
+      "acao": "SISTEMA_INICIADO",
+      "detalhes": "Banco JSON Fallback criado",
+      "data_acao": "2026-05-20T08:27:48.456Z"
+    },
+    {
+      "id": 2,
+      "usuario_id": 3,
+      "acao": "LOGIN",
+      "detalhes": "Usuário caixa logado com sucesso",
+      "data_acao": "2026-05-20T08:33:30.125Z"
+    },
+    {
+      "id": 3,
+      "usuario_id": 3,
+      "acao": "VENDA_CRIADA",
+      "detalhes": "Venda #1 finalizada. Total: R$ 4.50",
+      "data_acao": "2026-05-20T08:34:47.962Z"
+    },
+    {
+      "id": 4,
+      "usuario_id": 3,
+      "acao": "LOGOUT",
+      "detalhes": "Usuário caixa efetuou logout",
+      "data_acao": "2026-05-20T08:37:33.336Z"
+    },
+    {
+      "id": 5,
+      "usuario_id": 1,
+      "acao": "LOGIN",
+      "detalhes": "Usuário admin logado com sucesso",
+      "data_acao": "2026-05-20T08:37:50.397Z"
+    },
+    {
+      "id": 6,
+      "usuario_id": 1,
+      "acao": "LOGOUT",
+      "detalhes": "Usuário admin efetuou logout",
+      "data_acao": "2026-05-20T08:45:52.661Z"
+    },
+    {
+      "id": 7,
+      "usuario_id": 3,
+      "acao": "LOGIN",
+      "detalhes": "Usuário caixa logado com sucesso",
+      "data_acao": "2026-05-20T08:46:18.668Z"
+    },
+    {
+      "id": 8,
+      "usuario_id": 3,
+      "acao": "VENDA_CRIADA",
+      "detalhes": "Venda #2 finalizada. Total: R$ 44.50",
+      "data_acao": "2026-05-20T08:47:55.572Z"
+    }
+  ]
+}

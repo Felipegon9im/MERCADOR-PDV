@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerador de Licenças - MercadoPDV</title>
+  <!-- Tailwind CSS CDN for premium and quick layout styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Outfit', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              dark: '#0B0D13',
+              card: '#131722',
+              accent: '#4F46E5',
+              accentHover: '#4338CA',
+              border: '#1F293D',
+              success: '#10B981',
+              danger: '#EF4444',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #0B0D13;
+      color: #E2E8F0;
+    }
+    .glass-panel {
+      background: rgba(19, 23, 34, 0.7);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    .glow-indigo {
+      box-shadow: 0 0 40px -5px rgba(79, 70, 229, 0.2);
+    }
+    ::selection {
+      background: rgba(79, 70, 229, 0.3);
+      color: #FFF;
+    }
+  </style>
+</head>
+<body class="min-h-screen w-screen flex items-center justify-center relative overflow-x-hidden py-12 px-4">
+  <!-- Glowing shapes -->
+  <div class="absolute top-[-20%] left-[-15%] w-[800px] h-[800px] rounded-full bg-indigo-600/10 blur-[180px] pointer-events-none"></div>
+  <div class="absolute bottom-[-20%] right-[-15%] w-[800px] h-[800px] rounded-full bg-emerald-500/5 blur-[180px] pointer-events-none"></div>
+
+  <div class="w-full max-w-2xl z-10">
+    <!-- Header -->
+    <div class="flex flex-col items-center text-center mb-8">
+      <div class="h-16 w-16 rounded-2xl bg-gradient-to-tr from-brand-accent to-indigo-400 flex items-center justify-center font-bold text-white text-2xl shadow-xl shadow-indigo-500/20 mb-4">
+        🔑
+      </div>
+      <h1 class="text-3xl font-extrabold tracking-tight text-white">Gerador de Licenças MercadoPDV</h1>
+      <p class="text-sm text-gray-400 font-semibold mt-1 uppercase tracking-wider">Painel Administrativo do Distribuidor</p>
+    </div>
+
+    <!-- Generator Panel -->
+    <div class="glass-panel rounded-3xl p-8 border border-white/5 shadow-2xl glow-indigo">
+      <div class="space-y-6">
+        
+        <!-- Machine ID Input -->
+        <div class="space-y-2">
+          <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Identificador Único do Cliente (ID de Hardware)</label>
+          <input
+            id="machineId"
+            type="text"
+            placeholder="Cole aqui o ID enviado pelo cliente (ex: DEV-MACHINE-FALLBACK-UUID-12345)"
+            class="w-full bg-brand-dark border border-brand-border hover:border-gray-700 focus:border-brand-accent rounded-xl py-3.5 px-4 text-xs font-mono text-white placeholder-gray-600 outline-none transition-all duration-200"
+          />
+        </div>
+
+        <!-- Expiration options -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="space-y-2">
+            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Prazo da Assinatura</label>
+            <select
+              id="prazoSelect"
+              class="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3.5 px-4 text-sm font-semibold text-white outline-none transition-all duration-200"
+              onchange="onPrazoChange()"
+            >
+              <option value="30">Mensal (30 dias)</option>
+              <option value="90">Trimestral (90 dias)</option>
+              <option value="180">Semestral (180 dias)</option>
+              <option value="365">Anual (365 dias)</option>
+              <option value="vitalicio">Vitalício (Permanente)</option>
+              <option value="custom">Personalizado (Escolher Data)</option>
+            </select>
+          </div>
+
+          <div class="space-y-2" id="customDateContainer">
+            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Data de Expiração</label>
+            <input
+              id="expirationDate"
+              type="date"
+              class="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3.5 px-4 text-sm font-semibold text-white outline-none transition-all duration-200"
+            />
+          </div>
+        </div>
+
+        <!-- Generate Button -->
+        <button
+          type="button"
+          onclick="gerarChaveLicenca()"
+          class="w-full bg-brand-accent hover:bg-brand-accentHover text-white py-4 rounded-xl font-bold text-sm tracking-wide transition-colors shadow-lg shadow-indigo-500/20 flex items-center justify-center space-x-2"
+        >
+          <span>Gerar Chave de Ativação</span>
+        </button>
+
+        <hr class="border-white/5 my-6" />
+
+        <!-- Output Key Area -->
+        <div class="space-y-3 hidden" id="resultContainer">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-brand-success uppercase tracking-wider">Chave de Licença Gerada</label>
+            <span class="text-[10px] text-gray-500 font-semibold italic">Pronta para enviar ao cliente</span>
+          </div>
+          
+          <div class="relative">
+            <textarea
+              id="generatedKey"
+              readonly
+              class="w-full h-32 bg-brand-dark border border-brand-border rounded-xl p-4 text-xs font-mono text-indigo-300 placeholder-gray-600 outline-none resize-none"
+            ></textarea>
+            
+            <button
+              id="copyBtn"
+              type="button"
+              onclick="copyToClipboard()"
+              class="absolute bottom-4 right-4 bg-brand-accent hover:bg-brand-accentHover text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-md flex items-center space-x-1"
+            >
+              <span>Copiar Chave</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Cryptographic background details -->
+    <p class="text-[10px] text-center text-gray-600 font-semibold uppercase mt-6 tracking-widest">
+      Algoritmo de Assinatura Simétrica Criptografada HMAC-SHA256
+    </p>
+  </div>
+
+  <script>
+    // Pure JS HMAC-SHA256
+    function sha256(ascii) {
+      function rightRotate(value, amount) {
+        return (value >>> amount) | (value << (32 - amount));
+      }
+      
+      var mathPow = Math.pow;
+      var maxWord = mathPow(2, 32);
+      var lengthProperty = 'length';
+      var i, j;
+      var words = [];
+      var asciiLength = ascii[lengthProperty] * 8;
+      
+      var hash = sha256.h = sha256.h || [];
+      var k = sha256.k = sha256.k || [];
+      var primeCounter = k[lengthProperty];
+
+      var isPrime = {};
+      for (var candidate = 2; primeCounter < 64; candidate++) {
+        if (!isPrime[candidate]) {
+          for (i = 0; i < 313; i += candidate) {
+            isPrime[i] = 1;
+          }
+          hash[primeCounter] = (mathPow(candidate, .5) * maxWord) | 0;
+          k[primeCounter++] = (mathPow(candidate, 1/3) * maxWord) | 0;
+        }
+      }
+      
+      ascii += '\x80';
+      while (ascii[lengthProperty] % 64 - 56) ascii += '\x00';
+      for (i = 0; i < ascii[lengthProperty]; i++) {
+        j = ascii.charCodeAt(i);
+        if (j >> 8) return; // ASCII only
+        words[i >> 2] |= j << (24 - (i % 4) * 8);
+      }
+      words[words[lengthProperty]] = ((asciiLength / maxWord) | 0);
+      words[words[lengthProperty]] = (asciiLength | 0);
+      
+      var w = [];
+      var h0 = hash[0], h1 = hash[1], h2 = hash[2], h3 = hash[3], h4 = hash[4], h5 = hash[5], h6 = hash[6], h7 = hash[7];
+      for (i = 0; i < words[lengthProperty]; i += 16) {
+        var w_inside = [];
+        for (j = 0; j < 16; j++) w_inside[j] = words[i + j] | 0;
+        for (j = 16; j < 64; j++) {
+          var s0 = rightRotate(w_inside[j - 15], 7) ^ rightRotate(w_inside[j - 15], 18) ^ (w_inside[j - 15] >>> 3);
+          var s1 = rightRotate(w_inside[j - 2], 17) ^ rightRotate(w_inside[j - 2], 19) ^ (w_inside[j - 2] >>> 10);
+          w_inside[j] = (w_inside[j - 16] + s0 + w_inside[j - 7] + s1) | 0;
+        }
+        
+        var a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+        for (j = 0; j < 64; j++) {
+          var S1 = rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25);
+          var ch = (e & f) ^ ((~e) & g);
+          var temp1 = (h + S1 + ch + k[j] + w_inside[j]) | 0;
+          var S0 = rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22);
+          var maj = (a & b) ^ (a & c) ^ (b & c);
+          var temp2 = (S0 + maj) | 0;
+          
+          h = g;
+          g = f;
+          f = e;
+          e = (d + temp1) | 0;
+          d = c;
+          c = b;
+          b = a;
+          a = (temp1 + temp2) | 0;
+        }
+        
+        h0 = (h0 + a) | 0;
+        h1 = (h1 + b) | 0;
+        h2 = (h2 + c) | 0;
+        h3 = (h3 + d) | 0;
+        h4 = (h4 + e) | 0;
+        h5 = (h5 + f) | 0;
+        h6 = (h6 + g) | 0;
+        h7 = (h7 + h) | 0;
+      }
+      
+      var binary = '';
+      var finalWords = [h0, h1, h2, h3, h4, h5, h6, h7];
+      for (i = 0; i < 8; i++) {
+        var word = finalWords[i];
+        binary += String.fromCharCode(
+          (word >>> 24) & 255,
+          (word >>> 16) & 255,
+          (word >>> 8) & 255,
+          word & 255
+        );
+      }
+      return binary;
+    }
+
+    function hmacSha256(key, message) {
+      var blockSize = 64;
+      if (key.length > blockSize) {
+        key = sha256(key);
+      }
+      if (key.length < blockSize) {
+        while (key.length < blockSize) {
+          key += '\x00';
+        }
+      }
+      
+      var oKeyPad = '';
+      var iKeyPad = '';
+      for (var i = 0; i < blockSize; i++) {
+        oKeyPad += String.fromCharCode(key.charCodeAt(i) ^ 0x5c);
+        iKeyPad += String.fromCharCode(key.charCodeAt(i) ^ 0x36);
+      }
+      
+      var innerHash = sha256(iKeyPad + message);
+      var outerHash = sha256(oKeyPad + innerHash);
+      
+      var hex = '';
+      for (var j = 0; j < outerHash.length; j++) {
+        var h = outerHash.charCodeAt(j).toString(16);
+        if (h.length === 1) h = '0' + h;
+        hex += h;
+      }
+      return hex;
+    }
+
+    const SALT = "MercadoPDV_Secret_License_Salt_Key_2026_@Secured!";
+
+    function onPrazoChange() {
+      const select = document.getElementById('prazoSelect');
+      const container = document.getElementById('customDateContainer');
+      const input = document.getElementById('expirationDate');
+      
+      if (select.value === 'custom') {
+        container.style.opacity = '1';
+        container.style.pointerEvents = 'auto';
+        input.removeAttribute('disabled');
+      } else {
+        container.style.opacity = '0.5';
+        container.style.pointerEvents = 'none';
+        input.setAttribute('disabled', 'true');
+        
+        // Auto calculate presets
+        const hoje = new Date();
+        if (select.value === 'vitalicio') {
+          input.value = '2099-12-31';
+        } else {
+          const dias = parseInt(select.value);
+          hoje.setDate(hoje.getDate() + dias);
+          const y = hoje.getFullYear();
+          const m = String(hoje.getMonth() + 1).padStart(2, '0');
+          const d = String(hoje.getDate()).padStart(2, '0');
+          input.value = `${y}-${m}-${d}`;
+        }
+      }
+    }
+
+    function gerarChaveLicenca() {
+      const machineIdInput = document.getElementById('machineId').value.trim();
+      const expirationDateInput = document.getElementById('expirationDate').value.trim();
+      
+      if (!machineIdInput) {
+        alert('Por favor, insira o ID de Hardware da máquina do cliente!');
+        return;
+      }
+      if (!expirationDateInput) {
+        alert('Por favor, selecione ou digite uma data de expiração!');
+        return;
+      }
+      
+      // Criar a mensagem a ser assinada
+      const message = `${machineIdInput}|${expirationDateInput}`;
+      
+      // Assinar via HMAC-SHA256
+      const signature = hmacSha256(SALT, message);
+      
+      // Formatar a licença
+      const licensePlain = `${machineIdInput}|${expirationDateInput}|${signature}`;
+      
+      // Codificar em Base64
+      // Usamos uma decodificação segura para Unicode
+      const licenseBase64 = btoa(licensePlain);
+      
+      // Exibir
+      document.getElementById('generatedKey').value = licenseBase64;
+      document.getElementById('resultContainer').classList.remove('hidden');
+      
+      // Animacao de scroll suave ate o resultado
+      document.getElementById('resultContainer').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function copyToClipboard() {
+      const textarea = document.getElementById('generatedKey');
+      textarea.select();
+      textarea.setSelectionRange(0, 99999);
+      navigator.clipboard.writeText(textarea.value);
+      
+      const copyBtn = document.getElementById('copyBtn');
+      const originalText = copyBtn.innerHTML;
+      copyBtn.innerHTML = '<span>Copiado!</span>';
+      copyBtn.classList.remove('bg-brand-accent');
+      copyBtn.classList.add('bg-brand-success');
+      
+      setTimeout(() => {
+        copyBtn.innerHTML = originalText;
+        copyBtn.classList.remove('bg-brand-success');
+        copyBtn.classList.add('bg-brand-accent');
+      }, 2000);
+    }
+
+    // Initialize date on load
+    window.onload = () => {
+      onPrazoChange();
+    };
+  </script>
+</body>
+</html>
