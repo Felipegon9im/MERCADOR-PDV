@@ -78,6 +78,13 @@ export default function Estoque() {
     return ((s - c) / c) * 100;
   };
 
+  // Calculate total stock cost value per category
+  const getCategoryStockValue = (categoryId) => {
+    return products
+      .filter(p => p.categoria_id === categoryId)
+      .reduce((sum, p) => sum + ((p.estoque_atual || 0) * (p.preco_custo || 0)), 0);
+  };
+
   const handleSaveProduct = async (e) => {
     e.preventDefault();
     if (!currentProduct.nome || !currentProduct.categoria_id) return;
@@ -326,9 +333,14 @@ export default function Estoque() {
             className="w-full bg-brand-dark border border-brand-border/60 focus:border-brand-accent rounded-xl py-2.5 px-4 text-xs font-semibold text-gray-300 outline-none transition-colors"
           >
             <option value="">Todas as Categorias</option>
-            {categories.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.nome}</option>
-            ))}
+            {categories.map(cat => {
+              const value = getCategoryStockValue(cat.id);
+              return (
+                <option key={cat.id} value={cat.id}>
+                  {cat.nome} (R$ {value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                </option>
+              );
+            })}
           </select>
         </div>
 
