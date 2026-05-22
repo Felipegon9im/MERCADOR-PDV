@@ -13,6 +13,8 @@ import {
   Settings
 } from 'lucide-react';
 
+import useLicenseStore from '../store/useLicenseStore';
+
 const menuItems = [
   { path: '/admin', name: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'gerente'] },
   { path: '/admin/estoque', name: 'Estoque', icon: Package, roles: ['admin', 'gerente'] },
@@ -24,6 +26,7 @@ const menuItems = [
 
 export default function AdminLayout({ children }) {
   const { user, logout } = useAuthStore();
+  const { licenseStatus } = useLicenseStore();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -120,6 +123,24 @@ export default function AdminLayout({ children }) {
             {new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
         </header>
+
+        {licenseStatus.valida && licenseStatus.diasRestantes <= 5 && (
+          <div className="bg-gradient-to-r from-amber-500/20 to-red-500/20 border-b border-brand-border px-8 py-3 flex items-center justify-between text-xs text-amber-200 select-none shrink-0">
+            <div className="flex items-center space-x-2">
+              <span className="text-sm">⚠️</span>
+              <span className="font-bold">Aviso de Expiração:</span>
+              <span>Sua assinatura expira em {licenseStatus.diasRestantes} {licenseStatus.diasRestantes === 1 ? 'dia' : 'dias'} ({licenseStatus.expiraEm.split('-').reverse().join('/')}). Renove para evitar bloqueio do sistema.</span>
+            </div>
+            <a 
+              href="https://wa.me/5581999999999" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="bg-amber-500 hover:bg-amber-600 text-brand-dark font-extrabold px-3 py-1.5 rounded-lg transition-colors shadow-lg shadow-amber-500/10 shrink-0"
+            >
+              Renovar Agora
+            </a>
+          </div>
+        )}
 
         {/* Page children container */}
         <div className="flex-1 overflow-y-auto p-8 relative">

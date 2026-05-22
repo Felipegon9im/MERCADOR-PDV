@@ -65,5 +65,10 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.removeListener('updater:downloadProgress', subscription);
       };
     }
+  },
+
+  // Sistema de Licenciamento
+  licenca: {
+    getMachineId: () => ipcRenderer.invoke('licenca:getMachineId')
   }
 });

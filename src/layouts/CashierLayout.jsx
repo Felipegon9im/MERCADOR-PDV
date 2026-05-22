@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
+import useLicenseStore from '../store/useLicenseStore';
 import { LogOut, Home, Monitor, Clock, ShieldCheck } from 'lucide-react';
 
 export default function CashierLayout({ children }) {
   const { user, logout } = useAuthStore();
+  const { licenseStatus } = useLicenseStore();
   const navigate = useNavigate();
   const [time, setTime] = useState(new Date());
 
@@ -83,6 +85,24 @@ export default function CashierLayout({ children }) {
           </button>
         </div>
       </header>
+
+      {licenseStatus.valida && licenseStatus.diasRestantes <= 5 && (
+        <div className="bg-gradient-to-r from-amber-500/20 to-red-500/20 border-b border-brand-border px-6 py-2.5 flex items-center justify-between text-xs text-amber-200 select-none shrink-0">
+          <div className="flex items-center space-x-2">
+            <span className="text-sm">⚠️</span>
+            <span className="font-bold">Aviso de Expiração:</span>
+            <span>Sua assinatura expira em {licenseStatus.diasRestantes} {licenseStatus.diasRestantes === 1 ? 'dia' : 'dias'} ({licenseStatus.expiraEm.split('-').reverse().join('/')}). Renove para evitar interrupção nas vendas.</span>
+          </div>
+          <a 
+            href="https://wa.me/5581999999999" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="bg-amber-500 hover:bg-amber-600 text-brand-dark font-extrabold px-3 py-1 rounded-lg transition-colors shadow-lg shadow-amber-500/10 shrink-0"
+          >
+            Renovar Agora
+          </a>
+        </div>
+      )}
 
       {/* Main operational area */}
       <main className="flex-1 overflow-hidden relative">

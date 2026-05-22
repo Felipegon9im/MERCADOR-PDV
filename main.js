@@ -494,6 +494,61 @@ app.whenReady().then(() => {
     }
   });
 
+  // Módulo de Licenciamento (Hardware UUID)
+  ipcMain.handle('licenca:getMachineId', async () => {
+    return new Promise((resolve) => {
+      if (process.platform === 'win32') {
+        exec('wmic csproduct get uuid', (error, stdout) => {
+          let uuid = '';
+          if (!error && stdout) {
+            const lines = stdout.split('\r\n');
+            if (lines.length > 1 && lines[1].trim()) {
+              uuid = lines[1].trim();
+            }
+          }
+          if (uuid && uuid !== 'FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF' && uuid !== '00000000-0000-0000-0000-000000000000') {
+            resolve(uuid);
+            return;
+          }
+          
+          // Fallback para Serial da Placa Mãe / Bios
+          exec('wmic bios get serialnumber', (errBios, stdoutBios) => {
+            let serial = '';
+            if (!errBios && stdoutBios) {
+              const linesBios = stdoutBios.split('\r\n');
+              if (linesBios.length > 1 && linesBios[1].trim()) {
+                serial = linesBios[1].trim();
+              }
+            }
+            if (serial && serial.toLowerCase() !== 'to be filled by o.e.m.') {
+              resolve(`MERCADOPDV-BIOS-${serial}`);
+              return;
+            }
+            
+            resolve('MERCADOPDV-WIN-DEFAULT-UUID');
+          });
+        });
+      } else if (process.platform === 'darwin') {
+        exec("system_profiler SPHardwareDataType | awk '/UUID/ {print $3}'", (error, stdout) => {
+          if (!error && stdout.trim()) {
+            resolve(stdout.trim());
+          } else {
+            resolve('MERCADOPDV-MAC-FALLBACK-UUID');
+          }
+        });
+      } else {
+        // Linux
+        fs.readFile('/var/lib/dbus/machine-id', 'utf8', (err, data) => {
+          if (!err && data.trim()) {
+            resolve(data.trim());
+          } else {
+            resolve('MERCADOPDV-LINUX-FALLBACK-UUID');
+          }
+        });
+      }
+    });
+  });
+
   createWindow();
 
   app.on('activate', function () {

@@ -157,6 +157,14 @@ const api = {
       alert("Recurso de restauração disponível apenas no Desktop (Electron)");
       return { success: false, message: 'Não disponível no navegador' };
     }
+  },
+  
+  licenca: {
+    getMachineId: async () => {
+      if (window.api && window.api.licenca) return window.api.licenca.getMachineId();
+      console.warn("Electron License API not found. Mocking Machine ID in browser.");
+      return 'MERCADOPDV-DEVELOPER-MOCK-UUID-12345';
+    }
   }
 };
 

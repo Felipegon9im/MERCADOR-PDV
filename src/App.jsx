@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import useAuthStore from './store/useAuthStore';
+import useLicenseStore from './store/useLicenseStore';
 
 // Layouts
 import AdminLayout from './layouts/AdminLayout';
@@ -15,6 +16,7 @@ import XMLImport from './pages/XMLImport';
 import Relatorios from './pages/Relatorios';
 import Backup from './pages/Backup';
 import Config from './pages/Config';
+import LicencaBloqueio from './pages/LicencaBloqueio';
 
 // Protected Route wrapper for Auth
 function ProtectedRoute({ children, allowedRoles }) {
@@ -38,6 +40,25 @@ function ProtectedRoute({ children, allowedRoles }) {
 
 export default function App() {
   const { isAuthenticated, user } = useAuthStore();
+  const { licenseStatus, verificarLicenca, machineId } = useLicenseStore();
+
+  useEffect(() => {
+    verificarLicenca();
+  }, [verificarLicenca]);
+
+  if (licenseStatus.loading) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-brand-dark text-white select-none">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-accent mb-4"></div>
+        <p className="text-sm text-gray-400 font-semibold tracking-wide">Validando licença do terminal...</p>
+      </div>
+    );
+  }
+
+  // Se a licença não for válida, exibe unicamente a tela de bloqueio e impede acesso às rotas
+  if (!licenseStatus.valida) {
+    return <LicencaBloqueio currentLicenseStatus={licenseStatus} machineId={machineId} />;
+  }
 
   return (
     <HashRouter>
