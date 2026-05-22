@@ -196,12 +196,12 @@ export default function Estoque() {
   });
 
   // Calculate global stock metrics
-  const totalProdutos = products.length;
-  const totalEstoqueUN = products.filter(p => (p.unidade || 'UN') === 'UN').reduce((sum, p) => sum + (p.estoque_atual || 0), 0);
-  const totalEstoqueKG = products.filter(p => p.unidade === 'KG').reduce((sum, p) => sum + (p.estoque_atual || 0), 0);
+  const totalProdutos = filteredProducts.length;
+  const totalEstoqueUN = filteredProducts.filter(p => (p.unidade || 'UN') === 'UN').reduce((sum, p) => sum + (p.estoque_atual || 0), 0);
+  const totalEstoqueKG = filteredProducts.filter(p => p.unidade === 'KG').reduce((sum, p) => sum + (p.estoque_atual || 0), 0);
 
-  const custoTotal = products.reduce((sum, p) => sum + ((p.estoque_atual || 0) * (p.preco_custo || 0)), 0);
-  const vendaTotal = products.reduce((sum, p) => sum + ((p.estoque_atual || 0) * (p.preco_venda || 0)), 0);
+  const custoTotal = filteredProducts.reduce((sum, p) => sum + ((p.estoque_atual || 0) * (p.preco_custo || 0)), 0);
+  const vendaTotal = filteredProducts.reduce((sum, p) => sum + ((p.estoque_atual || 0) * (p.preco_venda || 0)), 0);
   const lucroTotal = vendaTotal - custoTotal;
   const margemMedia = custoTotal > 0 ? (lucroTotal / custoTotal) * 100 : 0;
 
