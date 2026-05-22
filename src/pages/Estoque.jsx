@@ -564,6 +564,12 @@ export default function Estoque() {
                     onChange={(e) => setCurrentProduct({...currentProduct, estoque_atual: parseFloat(e.target.value) || 0})}
                     className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none disabled:opacity-40"
                   />
+                  <div className="text-[10px] text-gray-500 font-bold mt-1.5 flex justify-between items-center px-1">
+                    <span>Valor Custo Total:</span>
+                    <span className="text-purple-400 font-extrabold text-xs">
+                      R$ {((currentProduct.estoque_atual || 0) * (currentProduct.preco_custo || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Min stock */}
