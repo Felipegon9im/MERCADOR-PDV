@@ -1,7 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, QrCode, Save, Building2, MapPin, Percent, CheckCircle2, Printer, ShieldAlert, FolderHeart, Scale } from 'lucide-react';
+import { Settings, QrCode, Save, Building2, MapPin, Percent, CheckCircle2, Printer, ShieldAlert, FolderHeart, Scale, Award, Lock, ShieldCheck, Copy, Check } from 'lucide-react';
+import useLicenseStore from '../store/useLicenseStore';
+import { validarLicencaLocal, salvarChaveLicenca } from '../services/licenca';
 
 export default function Config() {
+  const { licenseStatus, verificarLicenca, machineId } = useLicenseStore();
+  const [chaveInput, setChaveInput] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [licErrorMsg, setLicErrorMsg] = useState('');
+  const [licSuccessMsg, setLicSuccessMsg] = useState('');
+
+  const handleCopyMachineId = () => {
+    navigator.clipboard.writeText(machineId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleActivateLicense = (e) => {
+    e.preventDefault();
+    if (!chaveInput.trim()) {
+      setLicErrorMsg('Por favor, cole uma chave de licença.');
+      setLicSuccessMsg('');
+      return;
+    }
+
+    const resultado = validarLicencaLocal(chaveInput.trim(), machineId);
+    if (resultado.valida) {
+      salvarChaveLicenca(chaveInput.trim());
+      setLicErrorMsg('');
+      setLicSuccessMsg('Licença ativada e renovada com sucesso!');
+      setChaveInput('');
+      verificarLicenca(); // Atualiza a store global
+      setTimeout(() => setLicSuccessMsg(''), 5000);
+    } else {
+      setLicErrorMsg(resultado.motivo);
+      setLicSuccessMsg('');
+    }
+  };
+
   const [settings, setSettings] = useState({
     chavePix: '',
     beneficiario: '',
@@ -427,6 +463,119 @@ export default function Config() {
         </div>
 
       </form>
+
+      {/* Licenciamento do Sistema Section */}
+      <div className="bg-brand-card/40 border border-brand-border/50 rounded-3xl p-6 mt-6 space-y-6">
+        <div className="flex items-center space-x-3 pb-4 border-b border-brand-border/50">
+          <Lock className="text-brand-accent h-5 w-5 animate-pulse" />
+          <div>
+            <h3 className="text-sm font-extrabold text-white uppercase tracking-wider">Licenciamento & Assinatura Comercial</h3>
+            <p className="text-xs text-gray-500 font-semibold">Consulte o status da licença de uso do terminal, ID de hardware ou ative chaves de renovação</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Status & ID Column */}
+          <div className="space-y-6">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Identificador Único deste Terminal (ID de Hardware)</label>
+              <div className="flex items-center justify-between bg-brand-dark border border-brand-border rounded-xl p-3.5 transition-all">
+                <span className="font-mono text-xs text-indigo-300 font-bold tracking-wider select-text truncate pr-4">
+                  {machineId}
+                </span>
+                <button
+                  onClick={handleCopyMachineId}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-xs font-semibold text-gray-300 transition-colors shrink-0"
+                  type="button"
+                >
+                  {copied ? (
+                    <>
+                      <Check size={14} className="text-brand-success" />
+                      <span className="text-brand-success text-[10px]">Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={14} />
+                      <span className="text-[10px]">Copiar ID</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-500 font-medium italic">
+                * Envie este código ID ao suporte para gerar uma nova licença válida.
+              </p>
+            </div>
+
+            {/* License Status Card */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Status da Assinatura</label>
+              <div className={`p-4 rounded-xl border flex items-center space-x-4 ${
+                licenseStatus.valida 
+                  ? licenseStatus.diasRestantes <= 5 
+                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+                    : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
+                  : 'bg-brand-danger/10 border-brand-danger/20 text-brand-danger'
+              }`}>
+                <div className={`p-2.5 rounded-lg ${
+                  licenseStatus.valida 
+                    ? licenseStatus.diasRestantes <= 5 ? 'bg-amber-500/25' : 'bg-emerald-500/25' 
+                    : 'bg-brand-danger/25'
+                }`}>
+                  {licenseStatus.valida ? <ShieldCheck size={22} /> : <ShieldAlert size={22} />}
+                </div>
+                <div>
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider">
+                    {licenseStatus.valida 
+                      ? licenseStatus.diasRestantes <= 5 ? 'Assinatura Expirando Brevemente' : 'Assinatura Ativa & Válida' 
+                      : 'Assinatura Bloqueada'}
+                  </h4>
+                  <p className="text-xs font-medium opacity-80 mt-1">
+                    {licenseStatus.valida
+                      ? `Acesso liberado até ${licenseStatus.expiraEm.split('-').reverse().join('/')} (${licenseStatus.diasRestantes} dias restantes).`
+                      : 'Nenhuma chave de licença ativa ou válida foi encontrada.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Renewal / Key Activation Column */}
+          <div className="space-y-4">
+            <form onSubmit={handleActivateLicense} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Renovar Assinatura (Inserir Nova Chave)</label>
+                <textarea
+                  placeholder="Cole aqui a nova chave de ativação gerada pelo suporte..."
+                  value={chaveInput}
+                  onChange={(e) => setChaveInput(e.target.value)}
+                  className="w-full h-24 bg-brand-dark border border-brand-border/80 focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-mono text-white placeholder-gray-600 outline-none transition-colors resize-none"
+                  required
+                />
+              </div>
+
+              {licErrorMsg && (
+                <div className="text-xs bg-brand-danger/10 border border-brand-danger/20 text-brand-danger rounded-xl p-3 font-semibold animate-pulse">
+                  {licErrorMsg}
+                </div>
+              )}
+
+              {licSuccessMsg && (
+                <div className="text-xs bg-brand-success/10 border border-brand-success/20 text-brand-success rounded-xl p-3 font-semibold">
+                  {licSuccessMsg}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full bg-brand-accent hover:bg-brand-accentHover text-white py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors shadow-lg shadow-indigo-500/10 flex items-center justify-center space-x-2"
+              >
+                <Award size={14} />
+                <span>Validar e Ativar Licença</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
 
     </div>
   );
