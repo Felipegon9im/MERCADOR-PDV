@@ -68,6 +68,26 @@ const api = {
       if (window.api) return window.api.db.excluirProduto(id, usuarioId);
       console.log(`[API MOCK] Excluindo produto: ${id} pelo usuário ${usuarioId}`);
       return { success: true };
+    },
+    getClientes: async () => {
+      if (window.api) return window.api.db.getClientes();
+      return [];
+    },
+    salvarCliente: async (cliente) => {
+      if (window.api) return window.api.db.salvarCliente(cliente);
+      return { id: cliente.id || 99 };
+    },
+    lancarPagamentoCliente: async (clienteId, valor, formaPagamento, usuarioId) => {
+      if (window.api) return window.api.db.lancarPagamentoCliente(clienteId, valor, formaPagamento, usuarioId);
+      return { success: true, novoSaldo: 0 };
+    },
+    getClientePagamentos: async (clienteId) => {
+      if (window.api) return window.api.db.getClientePagamentos(clienteId);
+      return [];
+    },
+    getClienteExtrato: async (clienteId) => {
+      if (window.api) return window.api.db.getClienteExtrato(clienteId);
+      return null;
     }
   },
   
