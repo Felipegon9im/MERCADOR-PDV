@@ -60,6 +60,10 @@ const api = {
       if (window.api) return window.api.db.ajustarEstoque(produtoId, quantidade, tipo, motivo, usuarioId);
       return { success: true, novoEstoque: 99 };
     },
+    ajustarEstoqueCategoria: async (categoriaId, quantidade, tipo, motivo, usuarioId) => {
+      if (window.api) return window.api.db.ajustarEstoqueCategoria(categoriaId, quantidade, tipo, motivo, usuarioId);
+      return { success: true, novoEstoque: 99 };
+    },
     getMovimentacoesEstoque: async () => {
       if (window.api) return window.api.db.getMovimentacoesEstoque();
       return [];

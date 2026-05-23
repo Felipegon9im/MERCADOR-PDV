@@ -1249,6 +1249,78 @@ export default function Estoque() {
                           R$ {yld.faturamento.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
+
+                      {/* Últimas Movimentações */}
+                      <div className="mt-4 border-t border-brand-border/30 pt-4">
+                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block mb-2">📜 Histórico de Últimas Movimentações do Lote</span>
+                        
+                        {(() => {
+                          const catMovements = movements.filter(m => {
+                            if (m.categoria_id === selectedCategoryYield) return true;
+                            if (m.produto_id) {
+                              const prod = products.find(p => p.id === m.produto_id);
+                              return prod && prod.categoria_id === selectedCategoryYield;
+                            }
+                            return false;
+                          });
+
+                          if (catMovements.length === 0) {
+                            return (
+                              <p className="text-center py-4 text-xs text-gray-500 font-semibold italic">Nenhuma movimentação registrada para esta categoria.</p>
+                            );
+                          }
+
+                          return (
+                            <div className="max-h-48 overflow-y-auto border border-brand-border/40 bg-brand-dark/30 rounded-xl">
+                              <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                  <tr className="border-b border-brand-border/50 text-[9px] text-gray-500 font-bold uppercase bg-brand-card/50">
+                                    <th className="py-2.5 px-4">Data / Hora</th>
+                                    <th className="py-2.5 px-4">Operação</th>
+                                    <th className="py-2.5 px-4 text-right">Qtd</th>
+                                    <th className="py-2.5 px-4">Motivo / Produto</th>
+                                    <th className="py-2.5 px-4">Operador</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-brand-border/20 font-semibold text-gray-300">
+                                  {catMovements.slice(0, 15).map(m => {
+                                    const formattedDate = m.data_movimentacao 
+                                      ? new Date(m.data_movimentacao).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                      : 'Sem data';
+                                    
+                                    const isPositive = m.tipo === 'entrada';
+                                    const isAdjustment = m.tipo === 'ajuste';
+                                    const prefix = isPositive ? '+' : isAdjustment ? '=' : '';
+                                    const colorClass = isPositive ? 'text-brand-success' : isAdjustment ? 'text-brand-warning' : 'text-brand-danger';
+
+                                    return (
+                                      <tr key={m.id} className="hover:bg-brand-border/10">
+                                        <td className="py-2 px-4 text-[11px] text-gray-400">{formattedDate}</td>
+                                        <td className="py-2 px-4 uppercase text-[10px]">
+                                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                            isPositive ? 'bg-brand-success/10 text-brand-success border border-brand-success/20' : 
+                                            isAdjustment ? 'bg-brand-warning/10 text-brand-warning border border-brand-warning/20' : 
+                                            'bg-brand-danger/10 text-brand-danger border border-brand-danger/20'
+                                          }`}>
+                                            {m.tipo}
+                                          </span>
+                                        </td>
+                                        <td className={`py-2 px-4 text-right font-black ${colorClass}`}>
+                                          {prefix}{Math.abs(m.quantidade).toFixed(3)} kg
+                                        </td>
+                                        <td className="py-2 px-4 text-gray-400 max-w-[200px] truncate" title={m.motivo || m.produto_nome}>
+                                          {m.produto_nome && m.produto_nome !== 'Produto Excluído' ? `${m.produto_nome} (${m.motivo || 'Venda'})` : m.motivo || 'Ajuste'}
+                                        </td>
+                                        <td className="py-2 px-4 text-gray-500 text-[11px]">{m.usuario_nome || 'Sistema'}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </div>
                   );
                 })()}
@@ -1263,12 +1335,28 @@ export default function Estoque() {
                     <th className="py-3 px-3">Modelo Estoque</th>
                     <th className="py-3 px-3 text-right">Preço Custo Lote</th>
                     <th className="py-3 px-3 text-center">Peso Bruto Atual</th>
+                    <th className="py-3 px-3 text-center">Última Mov.</th>
                     <th className="py-3 px-4 text-center w-60">Ações de Gerenciamento</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-border/20">
                   {categories.map(cat => {
                     const isShared = cat.controle_estoque === 1;
+
+                    // Calculate latest stock movement date/time for this category
+                    const catMovements = movements.filter(m => {
+                      if (m.categoria_id === cat.id) return true;
+                      if (m.produto_id) {
+                        const prod = products.find(p => p.id === m.produto_id);
+                        return prod && prod.categoria_id === cat.id;
+                      }
+                      return false;
+                    });
+                    const lastMov = catMovements.length > 0 ? catMovements[0] : null;
+                    const lastMovDate = lastMov && lastMov.data_movimentacao
+                      ? new Date(lastMov.data_movimentacao).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                      : 'Sem registro';
+
                     return (
                       <tr key={cat.id} className="hover:bg-brand-border/5 font-semibold text-gray-300">
                         <td className="py-3 px-4 text-white font-bold">{cat.nome}</td>
@@ -1288,6 +1376,9 @@ export default function Estoque() {
                         </td>
                         <td className="py-3 px-3 text-center text-white font-black">
                           {isShared ? `${(cat.estoque_atual || 0).toFixed(3)} kg` : 'N/A'}
+                        </td>
+                        <td className="py-3 px-3 text-center text-[11px] text-gray-400">
+                          {lastMovDate}
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex justify-center items-center space-x-2">

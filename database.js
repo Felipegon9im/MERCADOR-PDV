@@ -170,6 +170,15 @@ if (typeof db.exec === 'function') {
     db.exec("ALTER TABLE estoque_movimentacoes ADD COLUMN categoria_id INTEGER;");
   } catch (err) {}
 
+  // Auto-migration to convert legacy UTC dates to valid ISO strings
+  try {
+    db.exec(`
+      UPDATE estoque_movimentacoes 
+      SET data_movimentacao = replace(data_movimentacao, ' ', 'T') || 'Z'
+      WHERE data_movimentacao NOT LIKE '%T%' AND data_movimentacao LIKE '%-%';
+    `);
+  } catch (err) {}
+
   // Auto-migration for existing SQLite databases to support client credit sales (Fiado)
   try {
     const tableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='vendas'").get()?.sql || "";
@@ -625,8 +634,8 @@ const dbService = {
     }
 
     db.prepare('UPDATE categorias SET estoque_atual = ? WHERE id = ?').run(newStock, categoriaId);
-    db.prepare('INSERT INTO estoque_movimentacoes (produto_id, categoria_id, quantidade, tipo, motivo, usuario_id) VALUES (NULL, ?, ?, ?, ?, ?)')
-      .run(categoriaId, qtyMov, tipo, motivo, usuarioId);
+    db.prepare('INSERT INTO estoque_movimentacoes (produto_id, categoria_id, quantidade, tipo, motivo, usuario_id, data_movimentacao) VALUES (NULL, ?, ?, ?, ?, ?, ?)')
+      .run(categoriaId, qtyMov, tipo, motivo, usuarioId, new Date().toISOString());
 
     return { success: true, novoEstoque: newStock };
   },
@@ -753,8 +762,8 @@ const dbService = {
 
       if (oldProd && oldProd.estoque_atual !== estoque_atual) {
         const diff = estoque_atual - oldProd.estoque_atual;
-        db.prepare('INSERT INTO estoque_movimentacoes (produto_id, quantidade, tipo, motivo, usuario_id) VALUES (?, ?, ?, ?, ?)')
-          .run(id, diff, 'ajuste', 'Ajuste manual de cadastro', usuarioId);
+        db.prepare('INSERT INTO estoque_movimentacoes (produto_id, quantidade, tipo, motivo, usuario_id, data_movimentacao) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(id, diff, 'ajuste', 'Ajuste manual de cadastro', usuarioId, new Date().toISOString());
       }
       return { id };
     } else {
@@ -762,8 +771,8 @@ const dbService = {
       const result = stmt.run(codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade || 'UN', tipo_produto || 'UNIDADE');
       const newId = result.lastInsertRowid;
 
-      db.prepare('INSERT INTO estoque_movimentacoes (produto_id, quantidade, tipo, motivo, usuario_id) VALUES (?, ?, ?, ?, ?)')
-        .run(newId, estoque_atual, 'entrada', 'Cadastro inicial de produto', usuarioId);
+      db.prepare('INSERT INTO estoque_movimentacoes (produto_id, quantidade, tipo, motivo, usuario_id, data_movimentacao) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(newId, estoque_atual, 'entrada', 'Cadastro inicial de produto', usuarioId, new Date().toISOString());
       return { id: newId };
     }
   },
@@ -843,8 +852,8 @@ const dbService = {
       }
 
       db.prepare('UPDATE categorias SET estoque_atual = ? WHERE id = ?').run(newCatStock, catId);
-      db.prepare('INSERT INTO estoque_movimentacoes (produto_id, categoria_id, quantidade, tipo, motivo, usuario_id) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(produtoId, catId, qtyMov, tipo, motivo, usuarioId);
+      db.prepare('INSERT INTO estoque_movimentacoes (produto_id, categoria_id, quantidade, tipo, motivo, usuario_id, data_movimentacao) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(produtoId, catId, qtyMov, tipo, motivo, usuarioId, new Date().toISOString());
 
       return { success: true, novoEstoque: newCatStock };
     }
@@ -862,8 +871,8 @@ const dbService = {
     }
 
     db.prepare('UPDATE produtos SET estoque_atual = ? WHERE id = ?').run(novoEstoque, produtoId);
-    db.prepare('INSERT INTO estoque_movimentacoes (produto_id, quantidade, tipo, motivo, usuario_id) VALUES (?, ?, ?, ?, ?)')
-      .run(produtoId, qtyMov, tipo, motivo, usuarioId);
+    db.prepare('INSERT INTO estoque_movimentacoes (produto_id, quantidade, tipo, motivo, usuario_id, data_movimentacao) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(produtoId, qtyMov, tipo, motivo, usuarioId, new Date().toISOString());
 
     return { success: true, novoEstoque };
   },
@@ -1030,8 +1039,8 @@ const dbService = {
       `);
 
       const stmtMov = db.prepare(`
-        INSERT INTO estoque_movimentacoes (produto_id, categoria_id, quantidade, tipo, motivo, usuario_id)
-        VALUES (?, ?, ?, 'saida', ?, ?)
+        INSERT INTO estoque_movimentacoes (produto_id, categoria_id, quantidade, tipo, motivo, usuario_id, data_movimentacao)
+        VALUES (?, ?, ?, 'saida', ?, ?, ?)
       `);
 
       for (const item of itens) {
@@ -1040,10 +1049,10 @@ const dbService = {
         const info = stmtCheckCat.get(item.produto_id);
         if (info && info.controle_estoque === 1) {
           stmtUpdateCatEstoque.run(item.quantidade, info.categoria_id);
-          stmtMov.run(item.produto_id, info.categoria_id, -item.quantidade, `Venda #${vendaId}`, usuarioId);
+          stmtMov.run(item.produto_id, info.categoria_id, -item.quantidade, `Venda #${vendaId}`, usuarioId, dataVenda);
         } else {
           stmtUpdateEstoque.run(item.quantidade, item.produto_id);
-          stmtMov.run(item.produto_id, null, -item.quantidade, `Venda #${vendaId}`, usuarioId);
+          stmtMov.run(item.produto_id, null, -item.quantidade, `Venda #${vendaId}`, usuarioId, dataVenda);
         }
       }
 
@@ -1252,8 +1261,8 @@ const dbService = {
       `);
 
       const stmtMov = db.prepare(`
-        INSERT INTO estoque_movimentacoes (produto_id, quantidade, tipo, motivo, usuario_id)
-        VALUES (?, ?, 'entrada', ?, ?)
+        INSERT INTO estoque_movimentacoes (produto_id, quantidade, tipo, motivo, usuario_id, data_movimentacao)
+        VALUES (?, ?, 'entrada', ?, ?, ?)
       `);
 
       for (const item of itens) {
@@ -1278,7 +1287,7 @@ const dbService = {
         stmtUpdateEstoque.run(item.quantidade, item.preco_custo, prodId);
 
         // Log movement
-        stmtMov.run(prodId, item.quantidade, `Importação XML Nota #${nota.numero_nota}`, usuarioId);
+        stmtMov.run(prodId, item.quantidade, `Importação XML Nota #${nota.numero_nota}`, usuarioId, new Date().toISOString());
       }
 
       return notaId;
