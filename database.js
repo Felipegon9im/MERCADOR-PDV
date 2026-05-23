@@ -176,6 +176,9 @@ if (typeof db.exec === 'function') {
     if (tableSql && !tableSql.includes("'fiado'")) {
       console.log("Migrating 'vendas' table to support 'fiado' payment method...");
       
+      // Temporarily disable foreign keys during migration to prevent SQLite from renaming references
+      db.exec("PRAGMA foreign_keys = OFF;");
+      
       const migrateVendas = db.transaction(() => {
         db.exec("ALTER TABLE vendas RENAME TO vendas_old;");
         db.exec(`
@@ -202,10 +205,47 @@ if (typeof db.exec === 'function') {
       });
 
       migrateVendas();
+      db.exec("PRAGMA foreign_keys = ON;");
       console.log("Vendas table successfully migrated.");
     }
   } catch (err) {
     console.error("Failed to migrate 'vendas' table:", err);
+    try { db.exec("PRAGMA foreign_keys = ON;"); } catch (_) {}
+  }
+
+  // Self-healing migration for itens_venda table pointing to vendas_old
+  try {
+    const itensSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='itens_venda'").get()?.sql || "";
+    if (itensSql && itensSql.toLowerCase().includes("vendas_old")) {
+      console.log("Self-healing: Repairing 'itens_venda' table pointing to 'vendas_old'...");
+      db.exec("PRAGMA foreign_keys = OFF;");
+      const repairItens = db.transaction(() => {
+        db.exec("ALTER TABLE itens_venda RENAME TO itens_venda_old;");
+        db.exec(`
+          CREATE TABLE itens_venda (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            venda_id INTEGER,
+            produto_id INTEGER,
+            quantidade REAL NOT NULL,
+            preco_unitario REAL NOT NULL,
+            total_item REAL NOT NULL,
+            FOREIGN KEY (venda_id) REFERENCES vendas(id) ON DELETE CASCADE,
+            FOREIGN KEY (produto_id) REFERENCES produtos(id)
+          );
+        `);
+        db.exec(`
+          INSERT INTO itens_venda (id, venda_id, produto_id, quantidade, preco_unitario, total_item)
+          SELECT id, venda_id, produto_id, quantidade, preco_unitario, total_item FROM itens_venda_old;
+        `);
+        db.exec("DROP TABLE itens_venda_old;");
+      });
+      repairItens();
+      db.exec("PRAGMA foreign_keys = ON;");
+      console.log("Self-healing: 'itens_venda' table successfully repaired.");
+    }
+  } catch (err) {
+    console.error("Self-healing failed to repair 'itens_venda':", err);
+    try { db.exec("PRAGMA foreign_keys = ON;"); } catch (_) {}
   }
 
   // Create clientes and cliente_pagamentos tables if they don't exist
