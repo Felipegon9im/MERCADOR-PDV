@@ -1637,7 +1637,6 @@ const dbService = {
     extrato = [...compras, ...pagamentos].sort((a, b) => new Date(b.data) - new Date(a.data));
     return { cliente, extrato };
   }
-}
 };
 
 module.exports = dbService;
