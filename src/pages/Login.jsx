@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import { Lock, User, KeyRound, ShieldAlert } from 'lucide-react';
+import loginBg from '../assets/login_bg.png';
 
 const profiles = [
   { username: 'admin', label: 'Administrador', color: 'border-indigo-500/30 text-indigo-400 bg-indigo-500/5 hover:bg-indigo-500/10' },
@@ -37,19 +38,21 @@ export default function Login() {
   };
 
   return (
-    <div className="h-screen w-screen flex items-center justify-center bg-brand-dark relative overflow-hidden select-none">
-      {/* Background ambient glowing shapes */}
-      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-brand-accent/10 blur-[150px] pointer-events-none"></div>
-      <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-pink-500/5 blur-[150px] pointer-events-none"></div>
+    <div 
+      className="h-screen w-screen flex items-center justify-center lg:justify-end lg:pr-20 xl:pr-36 bg-brand-dark relative overflow-hidden select-none bg-cover bg-center bg-no-repeat transition-all duration-500"
+      style={{ backgroundImage: `url(${loginBg})` }}
+    >
+      {/* Background dark overlay for better contrast */}
+      <div className="absolute inset-0 bg-black/30 pointer-events-none z-0"></div>
 
       <div className="w-full max-w-lg p-8 z-10">
         {/* Logo header */}
-        <div className="flex flex-col items-center justify-center mb-8">
-          <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-brand-accent to-pink-500 flex items-center justify-center font-bold text-white text-2xl shadow-xl shadow-indigo-500/20 glow-indigo mb-4 animate-bounce">
+        <div className="flex flex-col items-center justify-center mb-6">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-brand-accent to-pink-500 flex items-center justify-center font-bold text-white text-xl shadow-xl shadow-indigo-500/20 glow-indigo mb-3 animate-bounce">
             M
           </div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-white">MercadoPDV</h2>
-          <p className="text-sm text-gray-500 font-semibold mt-1">Insira suas credenciais ou selecione um perfil</p>
+          <h2 className="text-2xl font-black tracking-tight text-white">MercadoPDV</h2>
+          <p className="text-xs text-gray-400 font-semibold mt-1">Insira suas credenciais ou selecione um perfil</p>
         </div>
 
         {/* Login Glass Card */}
