@@ -1,8 +1,8 @@
-version: 1.0.1
+version: 1.0.2
 files:
-  - url: MercadoPDV-Setup-1.0.1.exe
-    sha512: YGGhsrdCsZXbX1e5pQTBRPJ2s+O1U8aE5CXt8y1abekzMxiUPvL6/JUCqWTbAgkk/KONEeDS1T/6pcC69VONTg==
-    size: 83538916
-path: MercadoPDV-Setup-1.0.1.exe
-sha512: YGGhsrdCsZXbX1e5pQTBRPJ2s+O1U8aE5CXt8y1abekzMxiUPvL6/JUCqWTbAgkk/KONEeDS1T/6pcC69VONTg==
-releaseDate: '2026-05-22T22:07:34.313Z'
+  - url: MercadoPDV-Setup-1.0.2.exe
+    sha512: T/fD+NgcW3rAmcYjOCnI+gFbcycAQ3wKwlIczcj+xpgPPA5RpC0KDJ7fUv/eYcOQ/Wot/eTrGSVi/o5Th2Z0aA==
+    size: 83539310
+path: MercadoPDV-Setup-1.0.2.exe
+sha512: T/fD+NgcW3rAmcYjOCnI+gFbcycAQ3wKwlIczcj+xpgPPA5RpC0KDJ7fUv/eYcOQ/Wot/eTrGSVi/o5Th2Z0aA==
+releaseDate: '2026-05-23T11:58:40.257Z'

@@ -332,23 +332,26 @@ export default function PDV() {
 
     // Check if it is a dynamic scale printed EAN-13 barcode starting with '2'
     if (barcode.length === 13 && barcode.startsWith('2')) {
-      const plu = barcode.substring(1, 6);
+      const plu6 = barcode.substring(1, 7);
+      const plu5 = barcode.substring(1, 6);
       const flag = barcode.substring(6, 7);
       const valDigits = barcode.substring(7, 12);
       
-      const cleanPlu = plu;
-      const intPlu = parseInt(plu, 10).toString();
+      const intPlu6 = parseInt(plu6, 10).toString();
+      const intPlu5 = parseInt(plu5, 10).toString();
       
-      // Look up in allProducts
-      let prod = allProducts.find(p => p.codigo_barras === cleanPlu || p.codigo_barras === intPlu);
-      if (!prod) {
-        prod = allProducts.find(p => p.id === parseInt(plu, 10));
-      }
+      // Look up in allProducts using 6-digit PLU and 5-digit PLU
+      let prod = allProducts.find(p => 
+        p.codigo_barras === plu6 || p.codigo_barras === intPlu6 ||
+        p.codigo_barras === plu5 || p.codigo_barras === intPlu5 ||
+        p.id === parseInt(plu6, 10) || p.id === parseInt(plu5, 10)
+      );
       
       if (prod) {
-        if (prod.unidade === 'KG') {
+        const isKg = prod.tipo_produto === 'KG' || prod.unidade === 'KG';
+        if (isKg) {
           let computedWeight = 0;
-          if (flag === '2' || flag === '9') {
+          if (flag === '0' || flag === '2' || flag === '9') {
             // Value is price in cents
             const totalPrice = parseFloat(valDigits) / 100;
             if (prod.preco_venda > 0) {
@@ -376,7 +379,7 @@ export default function PDV() {
         } else {
           // Product is UN, parse quantity or default to 1
           let qty = 1;
-          if (flag === '2' || flag === '9') {
+          if (flag === '0' || flag === '2' || flag === '9') {
             const totalPrice = parseFloat(valDigits) / 100;
             if (prod.preco_venda > 0) {
               qty = Math.round(totalPrice / prod.preco_venda);
@@ -394,7 +397,7 @@ export default function PDV() {
         }
       } else {
         playBeep('error');
-        alert(`Produto de balança (PLU: ${intPlu}) não foi encontrado.`);
+        alert(`Produto de balança (PLU: ${intPlu6} / ${intPlu5}) não foi encontrado.`);
         focusBarcode();
         return;
       }
@@ -403,7 +406,8 @@ export default function PDV() {
     // Standard barcode or code lookup
     const prod = await api.db.buscarProdutoPorCodigo(barcode);
     if (prod) {
-      if (prod.unidade === 'KG') {
+      const isKg = prod.tipo_produto === 'KG' || prod.unidade === 'KG';
+      if (isKg) {
         setWeighingProduct(prod);
         setShowWeighingModal(true);
         setScaleWeight(0);
@@ -421,7 +425,8 @@ export default function PDV() {
       // Try searching by name in all products list
       const matched = allProducts.find(p => p.nome.toLowerCase() === barcode.toLowerCase());
       if (matched) {
-        if (matched.unidade === 'KG') {
+        const isKg = matched.tipo_produto === 'KG' || matched.unidade === 'KG';
+        if (isKg) {
           setWeighingProduct(matched);
           setShowWeighingModal(true);
           setScaleWeight(0);
@@ -460,7 +465,8 @@ export default function PDV() {
   };
 
   const handleSelectSearchProduct = (prod) => {
-    if (prod.unidade === 'KG') {
+    const isKg = prod.tipo_produto === 'KG' || prod.unidade === 'KG';
+    if (isKg) {
       setWeighingProduct(prod);
       setShowWeighingModal(true);
       setScaleWeight(0);
@@ -564,7 +570,7 @@ export default function PDV() {
               <div class="item-row">
                 <div>${item.product.nome.toUpperCase()}</div>
                 <div class="row">
-                  <span>&nbsp;&nbsp;${item.product.unidade === 'KG' ? item.quantidade.toFixed(3) : item.quantidade} ${item.product.unidade || 'UN'} x R$ ${item.preco_unitario.toFixed(2)}</span>
+                  <span>&nbsp;&nbsp;${item.product.tipo_produto === 'KG' || item.product.unidade === 'KG' ? item.quantidade.toFixed(3) : item.quantidade} ${(item.product.unidade || 'UN')} x R$ ${item.preco_unitario.toFixed(2)}</span>
                   <span>R$ ${(item.quantidade * item.preco_unitario).toFixed(2)}</span>
                 </div>
               </div>
@@ -650,7 +656,7 @@ export default function PDV() {
                 <span className="text-[10px] text-brand-accent font-bold uppercase tracking-wider">Último Item Scaneado</span>
                 <h3 className="text-xl font-bold text-white leading-tight mt-0.5 truncate max-w-lg">{lastScannedItem.nome}</h3>
                 <p className="text-xs text-gray-500 font-semibold mt-1">
-                  EAN: {lastScannedItem.codigo_barras} | Qtd: {lastScannedItem.unidade === 'KG' ? lastScannedItem.qty.toFixed(3) : lastScannedItem.qty} {lastScannedItem.unidade || 'UN'}
+                  EAN: {lastScannedItem.codigo_barras} | Qtd: {lastScannedItem.tipo_produto === 'KG' || lastScannedItem.unidade === 'KG' ? lastScannedItem.qty.toFixed(3) : lastScannedItem.qty} {lastScannedItem.unidade || 'UN'}
                 </p>
               </div>
               <div className="text-right">
@@ -741,7 +747,8 @@ export default function PDV() {
                       <div className="flex items-center justify-center space-x-2">
                         <button
                           onClick={() => {
-                            const step = item.product.unidade === 'KG' ? 0.1 : 1;
+                            const isKg = item.product.tipo_produto === 'KG' || item.product.unidade === 'KG';
+                            const step = isKg ? 0.100 : 1;
                             updateQty(item.product.id, parseFloat((item.quantidade - step).toFixed(3)));
                           }}
                           className="h-7 w-7 rounded-lg bg-brand-border/40 hover:bg-brand-border text-gray-300 flex items-center justify-center hover:text-white transition-colors"
@@ -749,12 +756,13 @@ export default function PDV() {
                           <Minus size={12} />
                         </button>
                         <span className="w-16 text-center text-sm font-bold text-white">
-                          {item.product.unidade === 'KG' ? item.quantidade.toFixed(3) : item.quantidade}
+                          {item.product.tipo_produto === 'KG' || item.product.unidade === 'KG' ? item.quantidade.toFixed(3) : item.quantidade}
                           <span className="text-[10px] text-gray-500 font-bold ml-1 uppercase">{item.product.unidade || 'UN'}</span>
                         </span>
                         <button
                           onClick={() => {
-                            const step = item.product.unidade === 'KG' ? 0.1 : 1;
+                            const isKg = item.product.tipo_produto === 'KG' || item.product.unidade === 'KG';
+                            const step = isKg ? 0.100 : 1;
                             updateQty(item.product.id, parseFloat((item.quantidade + step).toFixed(3)));
                           }}
                           className="h-7 w-7 rounded-lg bg-brand-border/40 hover:bg-brand-border text-gray-300 flex items-center justify-center hover:text-white transition-colors"

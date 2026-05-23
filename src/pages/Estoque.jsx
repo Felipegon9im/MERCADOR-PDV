@@ -38,7 +38,8 @@ export default function Estoque() {
     preco_venda: 0,
     estoque_atual: 0,
     estoque_minimo: 5,
-    unidade: 'UN'
+    unidade: 'UN',
+    tipo_produto: 'UNIDADE'
   });
 
   const [stockAdjustment, setStockAdjustment] = useState({
@@ -163,7 +164,8 @@ export default function Estoque() {
       preco_venda: 0,
       estoque_atual: 0,
       estoque_minimo: 5,
-      unidade: 'UN'
+      unidade: 'UN',
+      tipo_produto: 'UNIDADE'
     });
     setShowProductModal(true);
   };
@@ -178,7 +180,8 @@ export default function Estoque() {
       preco_venda: prod.preco_venda,
       estoque_atual: prod.estoque_atual,
       estoque_minimo: prod.estoque_minimo,
-      unidade: prod.unidade || 'UN'
+      unidade: prod.unidade || 'UN',
+      tipo_produto: prod.tipo_produto || (prod.unidade === 'KG' ? 'KG' : 'UNIDADE')
     });
     setShowProductModal(true);
   };
@@ -204,8 +207,8 @@ export default function Estoque() {
 
   // Calculate global stock metrics
   const totalProdutos = filteredProducts.length;
-  const totalEstoqueUN = filteredProducts.filter(p => (p.unidade || 'UN') === 'UN').reduce((sum, p) => sum + (p.estoque_atual || 0), 0);
-  const totalEstoqueKG = filteredProducts.filter(p => p.unidade === 'KG').reduce((sum, p) => sum + (p.estoque_atual || 0), 0);
+  const totalEstoqueUN = filteredProducts.filter(p => (p.tipo_produto || 'UNIDADE') === 'UNIDADE').reduce((sum, p) => sum + (p.estoque_atual || 0), 0);
+  const totalEstoqueKG = filteredProducts.filter(p => p.tipo_produto === 'KG').reduce((sum, p) => sum + (p.estoque_atual || 0), 0);
 
   const custoTotal = filteredProducts.reduce((sum, p) => sum + ((p.estoque_atual || 0) * (p.preco_custo || 0)), 0);
   const vendaTotal = filteredProducts.reduce((sum, p) => sum + ((p.estoque_atual || 0) * (p.preco_venda || 0)), 0);
@@ -431,10 +434,10 @@ export default function Estoque() {
                           ? 'bg-brand-danger/10 border border-brand-danger/20 text-brand-danger' 
                           : 'bg-brand-border/50 border border-brand-border text-gray-300'
                       }`}>
-                        {prod.unidade === 'KG' ? prod.estoque_atual.toFixed(3) : prod.estoque_atual.toFixed(0)} {prod.unidade?.toLowerCase() || 'un'}
+                        {prod.tipo_produto === 'KG' || prod.unidade === 'KG' ? prod.estoque_atual.toFixed(3) : prod.estoque_atual.toFixed(0)} {(prod.unidade || 'UN').toLowerCase()}
                       </span>
                     </td>
-                    <td className="py-4 px-3 text-center text-gray-500">{prod.unidade === 'KG' ? prod.estoque_minimo.toFixed(3) : prod.estoque_minimo.toFixed(0)} {prod.unidade?.toLowerCase() || 'un'}</td>
+                    <td className="py-4 px-3 text-center text-gray-500">{prod.tipo_produto === 'KG' || prod.unidade === 'KG' ? prod.estoque_minimo.toFixed(3) : prod.estoque_minimo.toFixed(0)} {(prod.unidade || 'UN').toLowerCase()}</td>
                     <td className="py-4 px-6">
                       <div className="flex justify-center items-center space-x-2">
                         
@@ -601,28 +604,39 @@ export default function Estoque() {
               </div>
 
               <div className="grid grid-cols-3 gap-4">
-                {/* Initial Stock (Only on new product) */}
+                {/* Tipo de Produto */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-400 uppercase">Estoque Atual</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase">Tipo de Produto</label>
+                  <select
+                    value={currentProduct.tipo_produto || 'UNIDADE'}
+                    onChange={(e) => {
+                      const type = e.target.value;
+                      const unit = type === 'KG' ? 'KG' : 'UN';
+                      setCurrentProduct({...currentProduct, tipo_produto: type, unidade: unit});
+                    }}
+                    className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-gray-300 outline-none"
+                  >
+                    <option value="UNIDADE">UNIDADE (Mercado Comum)</option>
+                    <option value="KG">KG (Açougue / Frios)</option>
+                  </select>
+                </div>
+
+                {/* Estoque Inicial */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-400 uppercase">Estoque Inicial ({currentProduct.unidade || 'UN'})</label>
                   <input
                     disabled={!!currentProduct.id}
                     required
                     type="number"
                     step="0.001"
-                    placeholder="Ex: 10"
+                    placeholder="Ex: 0"
                     value={currentProduct.estoque_atual}
                     onChange={(e) => setCurrentProduct({...currentProduct, estoque_atual: parseFloat(e.target.value) || 0})}
                     className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none disabled:opacity-40"
                   />
-                  <div className="text-[10px] text-gray-500 font-bold mt-1.5 flex justify-between items-center px-1">
-                    <span>Valor Custo Total:</span>
-                    <span className="text-purple-400 font-extrabold text-xs">
-                      R$ {((currentProduct.estoque_atual || 0) * (currentProduct.preco_custo || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
                 </div>
 
-                {/* Min stock */}
+                {/* Estoque Mínimo */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-gray-400 uppercase">Estoque Mínimo</label>
                   <input
@@ -635,19 +649,17 @@ export default function Estoque() {
                     className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none"
                   />
                 </div>
+              </div>
 
-                {/* Unidade */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-400 uppercase">Unidade</label>
-                  <select
-                    value={currentProduct.unidade || 'UN'}
-                    onChange={(e) => setCurrentProduct({...currentProduct, unidade: e.target.value})}
-                    className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-gray-300 outline-none"
-                  >
-                    <option value="UN">UN (Unidade)</option>
-                    <option value="KG">KG (Quilo)</option>
-                  </select>
-                </div>
+              <div className="text-[10px] text-gray-500 font-bold mt-1 bg-brand-dark/30 border border-brand-border/40 p-2.5 rounded-xl flex justify-between items-center">
+                <span>
+                  {currentProduct.tipo_produto === 'KG' 
+                    ? "⚖️ Peso variável: dê entrada no peso total. O preço de venda refere-se ao quilo." 
+                    : "📦 Unidade de estoque fixo. O preço de venda refere-se à unidade inteira."}
+                </span>
+                <span className="text-purple-400 font-extrabold text-xs">
+                  Custo Total: R$ {((currentProduct.estoque_atual || 0) * (currentProduct.preco_custo || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
 
               <div className="flex space-x-3 pt-4">
@@ -744,6 +756,7 @@ export default function Estoque() {
                   required
                   autoFocus
                   type="number"
+                  step="0.001"
                   placeholder="Digite a quantidade..."
                   value={stockAdjustment.quantidade}
                   onChange={(e) => setStockAdjustment({...stockAdjustment, quantidade: e.target.value})}

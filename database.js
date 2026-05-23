@@ -54,6 +54,7 @@ if (typeof db.exec === 'function') {
       estoque_atual REAL DEFAULT 0,
       estoque_minimo REAL DEFAULT 0,
       unidade TEXT DEFAULT 'UN',
+      tipo_produto TEXT CHECK(tipo_produto IN ('KG', 'UNIDADE')) DEFAULT 'UNIDADE',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (categoria_id) REFERENCES categorias(id)
     );
@@ -141,6 +142,13 @@ if (typeof db.exec === 'function') {
     // Column already exists or table doesn't exist yet, ignore
   }
 
+  // Auto-migration for existing SQLite databases to add the tipo_produto column
+  try {
+    db.exec("ALTER TABLE produtos ADD COLUMN tipo_produto TEXT DEFAULT 'UNIDADE';");
+  } catch (err) {
+    // Column already exists or table doesn't exist yet, ignore
+  }
+
   // Seed default data if empty
   const userCount = db.prepare('SELECT count(*) as count FROM usuarios').get().count;
   if (userCount === 0) {
@@ -157,16 +165,16 @@ if (typeof db.exec === 'function') {
       INSERT INTO categorias (nome) VALUES ('Hortifruti');
     `);
 
-    const insertProd = db.prepare('INSERT INTO produtos (codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-    insertProd.run('7891000100101', 'Coca-Cola Lata 350ml', 2, 2.20, 4.50, 48, 10, 'UN');
-    insertProd.run('7891000100102', 'Cerveja Heineken Long Neck 330ml', 2, 4.50, 8.90, 24, 6, 'UN');
-    insertProd.run('7892000200201', 'Arroz Tio João Tipo 1 5kg', 1, 18.90, 29.90, 15, 5, 'UN');
-    insertProd.run('7892000200202', 'Feijão Carioca Kicaldo 1kg', 1, 5.20, 8.50, 20, 5, 'UN');
-    insertProd.run('7893000300301', 'Leite Integral Piracanjuba 1L', 3, 3.80, 5.49, 30, 8, 'UN');
-    insertProd.run('7893000300302', 'Alcatra Bovina Premium (KG)', 5, 29.50, 45.90, 18.5, 5, 'KG');
-    insertProd.run('7894000400401', 'Contra Filé Grill (KG)', 5, 34.00, 52.90, 12.0, 4, 'KG');
-    insertProd.run('7894000400402', 'Peito de Frango Resfriado (KG)', 5, 12.50, 18.90, 25.0, 6, 'KG');
-    insertProd.run('7895000500501', 'Biscoito Recheado Negresco 140g', 1, 1.80, 3.20, 25, 5, 'UN');
+    const insertProd = db.prepare('INSERT INTO produtos (codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade, tipo_produto) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    insertProd.run('7891000100101', 'Coca-Cola Lata 350ml', 2, 2.20, 4.50, 48, 10, 'UN', 'UNIDADE');
+    insertProd.run('7891000100102', 'Cerveja Heineken Long Neck 330ml', 2, 4.50, 8.90, 24, 6, 'UN', 'UNIDADE');
+    insertProd.run('7892000200201', 'Arroz Tio João Tipo 1 5kg', 1, 18.90, 29.90, 15, 5, 'UN', 'UNIDADE');
+    insertProd.run('7892000200202', 'Feijão Carioca Kicaldo 1kg', 1, 5.20, 8.50, 20, 5, 'UN', 'UNIDADE');
+    insertProd.run('7893000300301', 'Leite Integral Piracanjuba 1L', 3, 3.80, 5.49, 30, 8, 'UN', 'UNIDADE');
+    insertProd.run('7893000300302', 'Alcatra Bovina Premium (KG)', 5, 29.50, 45.90, 18.5, 5, 'KG', 'KG');
+    insertProd.run('7894000400401', 'Contra Filé Grill (KG)', 5, 34.00, 52.90, 12.0, 4, 'KG', 'KG');
+    insertProd.run('7894000400402', 'Peito de Frango Resfriado (KG)', 5, 12.50, 18.90, 25.0, 6, 'KG', 'KG');
+    insertProd.run('7895000500501', 'Biscoito Recheado Negresco 140g', 1, 1.80, 3.20, 25, 5, 'UN', 'UNIDADE');
 
     // Initial logs
     db.prepare('INSERT INTO logs_acoes (usuario_id, acao, detalhes) VALUES (?, ?, ?)').run(1, 'SISTEMA_INICIADO', 'Banco de dados inicializado com dados padrão');
@@ -205,6 +213,10 @@ function initJsonDbFallback(dbPath) {
             p.unidade = 'UN';
             migrated = true;
           }
+          if (!p.tipo_produto) {
+            p.tipo_produto = p.unidade === 'KG' ? 'KG' : 'UNIDADE';
+            migrated = true;
+          }
         });
       }
       if (migrated) save();
@@ -228,11 +240,11 @@ function initJsonDbFallback(dbPath) {
       { id: 5, nome: 'Hortifruti', created_at: new Date().toISOString() }
     );
     data.produtos.push(
-      { id: 1, codigo_barras: '7891000100101', nome: 'Coca-Cola Lata 350ml', categoria_id: 2, preco_custo: 2.20, preco_venda: 4.50, estoque_atual: 48, estoque_minimo: 10, unidade: 'UN', created_at: new Date().toISOString() },
-      { id: 2, codigo_barras: '7891000100102', nome: 'Cerveja Heineken Long Neck 330ml', categoria_id: 2, preco_custo: 4.50, preco_venda: 8.90, estoque_atual: 24, estoque_minimo: 6, unidade: 'UN', created_at: new Date().toISOString() },
-      { id: 3, codigo_barras: '7892000200201', nome: 'Arroz Tio João Tipo 1 5kg', categoria_id: 1, preco_custo: 18.90, preco_venda: 29.90, estoque_atual: 15, estoque_minimo: 5, unidade: 'UN', created_at: new Date().toISOString() },
-      { id: 4, codigo_barras: '7892000200202', nome: 'Feijão Carioca Kicaldo 1kg', categoria_id: 1, preco_custo: 5.20, preco_venda: 8.50, estoque_atual: 20, estoque_minimo: 5, unidade: 'UN', created_at: new Date().toISOString() },
-      { id: 5, codigo_barras: '7893000300302', nome: 'Alcatra Bovina Premium (KG)', categoria_id: 5, preco_custo: 29.50, preco_venda: 45.90, estoque_atual: 18.5, estoque_minimo: 5, unidade: 'KG', created_at: new Date().toISOString() }
+      { id: 1, codigo_barras: '7891000100101', nome: 'Coca-Cola Lata 350ml', categoria_id: 2, preco_custo: 2.20, preco_venda: 4.50, estoque_atual: 48, estoque_minimo: 10, unidade: 'UN', tipo_produto: 'UNIDADE', created_at: new Date().toISOString() },
+      { id: 2, codigo_barras: '7891000100102', nome: 'Cerveja Heineken Long Neck 330ml', categoria_id: 2, preco_custo: 4.50, preco_venda: 8.90, estoque_atual: 24, estoque_minimo: 6, unidade: 'UN', tipo_produto: 'UNIDADE', created_at: new Date().toISOString() },
+      { id: 3, codigo_barras: '7892000200201', nome: 'Arroz Tio João Tipo 1 5kg', categoria_id: 1, preco_custo: 18.90, preco_venda: 29.90, estoque_atual: 15, estoque_minimo: 5, unidade: 'UN', tipo_produto: 'UNIDADE', created_at: new Date().toISOString() },
+      { id: 4, codigo_barras: '7892000200202', nome: 'Feijão Carioca Kicaldo 1kg', categoria_id: 1, preco_custo: 5.20, preco_venda: 8.50, estoque_atual: 20, estoque_minimo: 5, unidade: 'UN', tipo_produto: 'UNIDADE', created_at: new Date().toISOString() },
+      { id: 5, codigo_barras: '7893000300302', nome: 'Alcatra Bovina Premium (KG)', categoria_id: 5, preco_custo: 29.50, preco_venda: 45.90, estoque_atual: 18.5, estoque_minimo: 5, unidade: 'KG', tipo_produto: 'KG', created_at: new Date().toISOString() }
     );
     data.logs_acoes.push({
       id: 1, usuario_id: 1, acao: 'SISTEMA_INICIADO', detalhes: 'Banco JSON Fallback criado', data_acao: new Date().toISOString()
@@ -400,13 +412,13 @@ const dbService = {
   },
 
   salvarProduto: (product, usuarioId = 1) => {
-    const { id, codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade } = product;
+    const { id, codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade, tipo_produto } = product;
     if (db.isJson) {
       if (id) {
         const idx = db._data.produtos.findIndex(p => p.id === id);
         if (idx !== -1) {
           const oldStock = db._data.produtos[idx].estoque_atual;
-          db._data.produtos[idx] = { ...db._data.produtos[idx], codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade: unidade || 'UN' };
+          db._data.produtos[idx] = { ...db._data.produtos[idx], codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade: unidade || 'UN', tipo_produto: tipo_produto || 'UNIDADE' };
           db._save();
           // Log inventory adjustment
           if (oldStock !== estoque_atual) {
@@ -427,7 +439,7 @@ const dbService = {
       } else {
         const newId = db._data.produtos.length ? Math.max(...db._data.produtos.map(p => p.id)) + 1 : 1;
         db._data.produtos.push({
-          id: newId, codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade: unidade || 'UN', created_at: new Date().toISOString()
+          id: newId, codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade: unidade || 'UN', tipo_produto: tipo_produto || 'UNIDADE', created_at: new Date().toISOString()
         });
         // Log movement
         db._data.estoque_movimentacoes.push({
@@ -446,8 +458,8 @@ const dbService = {
 
     if (id) {
       const oldProd = db.prepare('SELECT estoque_atual FROM produtos WHERE id = ?').get(id);
-      const stmt = db.prepare('UPDATE produtos SET codigo_barras = ?, nome = ?, categoria_id = ?, preco_custo = ?, preco_venda = ?, estoque_atual = ?, estoque_minimo = ?, unidade = ? WHERE id = ?');
-      stmt.run(codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade || 'UN', id);
+      const stmt = db.prepare('UPDATE produtos SET codigo_barras = ?, nome = ?, categoria_id = ?, preco_custo = ?, preco_venda = ?, estoque_atual = ?, estoque_minimo = ?, unidade = ?, tipo_produto = ? WHERE id = ?');
+      stmt.run(codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade || 'UN', tipo_produto || 'UNIDADE', id);
 
       if (oldProd && oldProd.estoque_atual !== estoque_atual) {
         const diff = estoque_atual - oldProd.estoque_atual;
@@ -456,8 +468,8 @@ const dbService = {
       }
       return { id };
     } else {
-      const stmt = db.prepare('INSERT INTO produtos (codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-      const result = stmt.run(codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade || 'UN');
+      const stmt = db.prepare('INSERT INTO produtos (codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade, tipo_produto) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+      const result = stmt.run(codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade || 'UN', tipo_produto || 'UNIDADE');
       const newId = result.lastInsertRowid;
 
       db.prepare('INSERT INTO estoque_movimentacoes (produto_id, quantidade, tipo, motivo, usuario_id) VALUES (?, ?, ?, ?, ?)')
@@ -753,6 +765,8 @@ const dbService = {
             preco_venda: parseFloat((item.preco_custo * 1.50).toFixed(2)), // Margem padrão 50%
             estoque_atual: 0,
             estoque_minimo: 5,
+            unidade: 'UN',
+            tipo_produto: 'UNIDADE',
             created_at: new Date().toISOString()
           };
           db._data.produtos.push(prod);
@@ -827,8 +841,8 @@ const dbService = {
         let prodId;
         if (!prod) {
           const stmtNewProd = db.prepare(`
-            INSERT INTO produtos (codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo)
-            VALUES (?, ?, 1, ?, ?, 0, 5)
+            INSERT INTO produtos (codigo_barras, nome, categoria_id, preco_custo, preco_venda, estoque_atual, estoque_minimo, unidade, tipo_produto)
+            VALUES (?, ?, 1, ?, ?, 0, 5, 'UN', 'UNIDADE')
           `);
           const resNew = stmtNewProd.run(item.codigo_barras, item.nome, item.preco_custo, parseFloat((item.preco_custo * 1.5).toFixed(2)));
           prodId = resNew.lastInsertRowid;
