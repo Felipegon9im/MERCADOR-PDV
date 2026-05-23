@@ -24,11 +24,13 @@ Foi construída uma nova e avançada tela administrativa retaguarda com estilo *
 *   **Recebimento de Fiado:** Lançamento de pagamentos diretamente pelo extrato (PIX, Dinheiro, Débito ou Crédito) com abate transacional instantâneo do saldo devedor.
 *   **Impressão de Extrato e Recibo:** Emissão de cupom impresso para o cliente comprovando o pagamento de fiado efetuado.
 
-### 3. 🥩 Modo Açougue Avançado (Consolidado da v1.0.3)
-*   **Controle por Categoria:** O lojista pode configurar categorias como **"Estoque por Peso Bruto (Modo Açougue)"**.
-*   **Entrada de Peso Bruto:** Lançamento direto na categoria pai (ex: *Corte Traseiro* = `60,000 kg`) e repasse de custo médio.
-*   **Estoque Dinâmico Compartilhado:** Cortes vinculados (ex: *Picanha*, *Alcatra*) herdam o peso da carcaça de forma dinâmica com badge explicativo `Lote (Compartilhado)`.
+### 3. 🥩 Modo Açougue Avançado (Melhorado v1.0.4)
+*   **Controle e Criação Direta:** Agora você pode ativar o **Modelo Açougue (Estoque por Peso Bruto)** e definir o Peso Bruto Inicial (KG) e Preço de Custo (R$/KG) **no próprio momento de criar a categoria** (sem necessidade de criar primeiro e editar depois).
+*   **Facilidade no Cadastro de Cortes:** Ao cadastrar ou editar um produto e vinculá-lo a uma categoria do tipo açougue, o campo **Estoque Inicial fica automaticamente desativado e travado em 0**, com um aviso explicativo: *não necessita de estoque individual*. O lojista preenche apenas o Custo e a Venda do corte! O sistema também trava automaticamente o Tipo de Produto como `KG` para máxima consistência.
+*   **Entrada e Perda Centralizada:** O lojista lança as entradas da carcaça/lote inteiro diretamente na categoria (ex: entrada de `60,000 kg` de *Corte Traseiro*). As vendas e descartes (perdas) lançadas no sistema abatem transacionalmente desse estoque centralizado.
+*   **Estoque Dinâmico Compartilhado:** Cortes vinculados (ex: *Picanha*, *Alcatra*) mostram o peso da carcaça de forma dinâmica com badge explicativo `Lote (Compartilhado)`.
 *   **Relatório de Rendimento de Lote:** Exibe o Total Recebido, Peso Comercializado, Descartes/Aparas registradas como perdas, Faturamento bruto gerado e a porcentagem exata de **Aproveitamento Real (%)** da carcaça.
+*   **Destaque Visual:** O botão de salvar no modal de configuração de categoria foi renomeado para **"Atualizar Categoria"** e destacado com gradiente de destaque premium (`purple to brand-accent`).
 
 ---
 

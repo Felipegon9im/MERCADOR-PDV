@@ -66,6 +66,9 @@ export default function Estoque() {
   const [productToDelete, setProductToDelete] = useState(null);
 
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryControleEstoque, setNewCategoryControleEstoque] = useState(0);
+  const [newCategoryEstoqueAtual, setNewCategoryEstoqueAtual] = useState('');
+  const [newCategoryPrecoCusto, setNewCategoryPrecoCusto] = useState('');
 
   const loadData = async () => {
     try {
@@ -85,6 +88,26 @@ export default function Estoque() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Enforce Açougue rules on product modal (lock to KG, 0 stock) when category changes
+  useEffect(() => {
+    if (currentProduct.categoria_id) {
+      const selectedCat = categories.find(c => c.id === currentProduct.categoria_id);
+      if (selectedCat && selectedCat.controle_estoque === 1) {
+        setCurrentProduct(prev => {
+          if (prev.tipo_produto !== 'KG' || prev.unidade !== 'KG' || prev.estoque_atual !== 0) {
+            return {
+              ...prev,
+              tipo_produto: 'KG',
+              unidade: 'KG',
+              estoque_atual: 0
+            };
+          }
+          return prev;
+        });
+      }
+    }
+  }, [currentProduct.categoria_id, categories]);
 
   // Calculate profit margin helper
   const calculateMargin = (cost, sale) => {
@@ -121,11 +144,14 @@ export default function Estoque() {
     try {
       await api.db.salvarCategoria({
         nome: newCategoryName.trim(),
-        controle_estoque: 0,
-        estoque_atual: 0,
-        preco_custo: 0
+        controle_estoque: newCategoryControleEstoque,
+        estoque_atual: parseFloat(newCategoryEstoqueAtual) || 0,
+        preco_custo: parseFloat(newCategoryPrecoCusto) || 0
       });
       setNewCategoryName('');
+      setNewCategoryControleEstoque(0);
+      setNewCategoryEstoqueAtual('');
+      setNewCategoryPrecoCusto('');
       setShowCategoryModal(false);
       loadData();
     } catch (err) {
@@ -771,64 +797,84 @@ export default function Estoque() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                {/* Tipo de Produto */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-400 uppercase">Tipo de Produto</label>
-                  <select
-                    value={currentProduct.tipo_produto || 'UNIDADE'}
-                    onChange={(e) => {
-                      const type = e.target.value;
-                      const unit = type === 'KG' ? 'KG' : 'UN';
-                      setCurrentProduct({...currentProduct, tipo_produto: type, unidade: unit});
-                    }}
-                    className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-gray-300 outline-none"
-                  >
-                    <option value="UNIDADE">UNIDADE (Mercado Comum)</option>
-                    <option value="KG">KG (Açougue / Frios)</option>
-                  </select>
-                </div>
+              {(() => {
+                const selectedCat = categories.find(c => c.id === currentProduct.categoria_id);
+                const isAcougueCategory = selectedCat && selectedCat.controle_estoque === 1;
 
-                {/* Estoque Inicial */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-400 uppercase">Estoque Inicial ({currentProduct.unidade || 'UN'})</label>
-                  <input
-                    disabled={!!currentProduct.id}
-                    required
-                    type="number"
-                    step="0.001"
-                    placeholder="Ex: 0"
-                    value={currentProduct.estoque_atual}
-                    onChange={(e) => setCurrentProduct({...currentProduct, estoque_atual: parseFloat(e.target.value) || 0})}
-                    className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none disabled:opacity-40"
-                  />
-                </div>
+                return (
+                  <>
+                    <div className="grid grid-cols-3 gap-4">
+                      {/* Tipo de Produto */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-400 uppercase">Tipo de Produto</label>
+                        <select
+                          disabled={isAcougueCategory}
+                          value={currentProduct.tipo_produto || 'UNIDADE'}
+                          onChange={(e) => {
+                            const type = e.target.value;
+                            const unit = type === 'KG' ? 'KG' : 'UN';
+                            setCurrentProduct({...currentProduct, tipo_produto: type, unidade: unit});
+                          }}
+                          className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-gray-300 outline-none disabled:opacity-50"
+                        >
+                          <option value="UNIDADE">UNIDADE (Mercado Comum)</option>
+                          <option value="KG">KG (Açougue / Frios)</option>
+                        </select>
+                      </div>
 
-                {/* Estoque Mínimo */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-400 uppercase">Estoque Mínimo</label>
-                  <input
-                    required
-                    type="number"
-                    step="0.001"
-                    placeholder="Ex: 5"
-                    value={currentProduct.estoque_minimo}
-                    onChange={(e) => setCurrentProduct({...currentProduct, estoque_minimo: parseFloat(e.target.value) || 0})}
-                    className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none"
-                  />
-                </div>
-              </div>
+                      {/* Estoque Inicial */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-400 uppercase">
+                          Estoque Inicial ({currentProduct.unidade || 'UN'})
+                        </label>
+                        <input
+                          disabled={!!currentProduct.id || isAcougueCategory}
+                          required={!isAcougueCategory}
+                          type="number"
+                          step="0.001"
+                          placeholder={isAcougueCategory ? "Não necessário" : "Ex: 0"}
+                          value={isAcougueCategory ? 0 : currentProduct.estoque_atual}
+                          onChange={(e) => {
+                            if (!isAcougueCategory) {
+                              setCurrentProduct({...currentProduct, estoque_atual: parseFloat(e.target.value) || 0});
+                            }
+                          }}
+                          className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none disabled:opacity-40"
+                        />
+                      </div>
 
-              <div className="text-[10px] text-gray-500 font-bold mt-1 bg-brand-dark/30 border border-brand-border/40 p-2.5 rounded-xl flex justify-between items-center">
-                <span>
-                  {currentProduct.tipo_produto === 'KG' 
-                    ? "⚖️ Peso variável: dê entrada no peso total. O preço de venda refere-se ao quilo." 
-                    : "📦 Unidade de estoque fixo. O preço de venda refere-se à unidade inteira."}
-                </span>
-                <span className="text-purple-400 font-extrabold text-xs">
-                  Custo Total: R$ {((currentProduct.estoque_atual || 0) * (currentProduct.preco_custo || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
+                      {/* Estoque Mínimo */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-400 uppercase">Estoque Mínimo</label>
+                        <input
+                          required
+                          type="number"
+                          step="0.001"
+                          placeholder="Ex: 5"
+                          value={currentProduct.estoque_minimo}
+                          onChange={(e) => setCurrentProduct({...currentProduct, estoque_minimo: parseFloat(e.target.value) || 0})}
+                          className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="text-[10px] text-gray-500 font-bold mt-1 bg-brand-dark/30 border border-brand-border/40 p-2.5 rounded-xl flex justify-between items-center">
+                      <span>
+                        {isAcougueCategory 
+                          ? "🥩 Estoque centralizado por peso bruto: produto cadastrado na categoria de açougue. Não necessita estoque individual."
+                          : currentProduct.tipo_produto === 'KG' 
+                            ? "⚖️ Peso variável: dê entrada no peso total. O preço de venda refere-se ao quilo." 
+                            : "📦 Unidade de estoque fixo. O preço de venda refere-se à unidade inteira."}
+                      </span>
+                      <span className="text-purple-400 font-extrabold text-xs">
+                        {isAcougueCategory 
+                          ? "Estoque da Categoria"
+                          : `Custo Total: R$ ${((currentProduct.estoque_atual || 0) * (currentProduct.preco_custo || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
 
               <div className="flex space-x-3 pt-4">
                 <button
@@ -998,6 +1044,47 @@ export default function Estoque() {
                   className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none"
                 />
               </div>
+
+              {/* Toggle Controle Estoque */}
+              <div className="p-3 bg-brand-dark/30 border border-brand-border/40 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-white block">Estoque por Peso Bruto (Açougue)</span>
+                  <span className="text-[10px] text-gray-500 font-semibold block leading-tight mt-0.5">Controla o estoque centralizado na categoria</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={newCategoryControleEstoque === 1}
+                  onChange={(e) => setNewCategoryControleEstoque(e.target.checked ? 1 : 0)}
+                  className="h-4 w-4 text-brand-accent focus:ring-0 rounded border-brand-border bg-brand-dark"
+                />
+              </div>
+
+              {newCategoryControleEstoque === 1 && (
+                <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-3 duration-200">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase block">Peso Bruto Inicial (KG)</label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      placeholder="0.000"
+                      value={newCategoryEstoqueAtual}
+                      onChange={(e) => setNewCategoryEstoqueAtual(e.target.value)}
+                      className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase block">Preço de Custo (R$/KG)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={newCategoryPrecoCusto}
+                      onChange={(e) => setNewCategoryPrecoCusto(e.target.value)}
+                      className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="flex space-x-3 pt-2">
                 <button
@@ -1338,9 +1425,9 @@ export default function Estoque() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-brand-accent hover:bg-brand-accentHover text-white font-bold py-3 rounded-xl text-xs transition-colors shadow-lg shadow-indigo-500/20"
+                  className="flex-1 bg-gradient-to-r from-purple-600 to-brand-accent hover:from-purple-500 hover:to-brand-accentHover text-white font-black py-3 rounded-xl text-xs transition-all transform hover:scale-[1.02] shadow-lg shadow-purple-500/20 border border-purple-400/30"
                 >
-                  Salvar Alterações
+                  Atualizar Categoria
                 </button>
               </div>
             </form>
