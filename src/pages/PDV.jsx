@@ -17,7 +17,8 @@ import {
   Check, 
   CreditCard, 
   QrCode,
-  Scale
+  Scale,
+  User
 } from 'lucide-react';
 
 // Synthetic sound generator
@@ -70,7 +71,7 @@ export default function PDV() {
 
   // Checkout states
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('dinheiro'); // dinheiro, pix, debito, credito
+  const [paymentMethod, setPaymentMethod] = useState('dinheiro'); // dinheiro, pix, debito, credito, fiado
   const [cashPaid, setCashPaid] = useState('');
   const [change, setChange] = useState(0);
   const [pixQrCodeUrl, setPixQrCodeUrl] = useState('');
@@ -79,6 +80,12 @@ export default function PDV() {
     beneficiario: 'CONVENIENCIA OFF',
     cidade: 'SAO PAULO'
   });
+
+  // Clients states for Venda Fiada
+  const [clients, setClients] = useState([]);
+  const [selectedClientId, setSelectedClientId] = useState('');
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [clientSearchText, setClientSearchText] = useState('');
 
   // Discount states
   const [showDiscountModal, setShowDiscountModal] = useState(false);
@@ -198,7 +205,7 @@ export default function PDV() {
     focusBarcode();
   };
 
-  // Load all products for search autocompletion
+  // Load all products and clients
   const fetchProducts = async () => {
     try {
       const data = await api.db.getProdutos();
@@ -208,8 +215,18 @@ export default function PDV() {
     }
   };
 
+  const fetchClients = async () => {
+    try {
+      const data = await api.db.getClientes();
+      setClients(data);
+    } catch (e) {
+      console.error("Erro ao carregar clientes:", e);
+    }
+  };
+
   useEffect(() => {
     fetchProducts();
+    fetchClients();
     focusBarcode();
   }, []);
 
@@ -487,6 +504,9 @@ export default function PDV() {
     setCashPaid('');
     setChange(0);
     setPaymentMethod('dinheiro');
+    setSelectedClientId('');
+    setSelectedClient(null);
+    setClientSearchText('');
     setShowPaymentModal(true);
   };
 
@@ -504,6 +524,23 @@ export default function PDV() {
   const handleFinalizeSale = async () => {
     if (items.length === 0) return;
 
+    if (paymentMethod === 'fiado') {
+      if (!selectedClientId) {
+        playBeep('error');
+        alert("Por favor, selecione um cliente para realizar a venda fiada.");
+        return;
+      }
+      const client = clients.find(c => c.id === parseInt(selectedClientId, 10));
+      if (client) {
+        const totalComDebito = (client.saldo_devedor || 0) + total;
+        if (client.limite_credito > 0 && totalComDebito > client.limite_credito) {
+          playBeep('error');
+          alert(`Esta venda ultrapassa o limite de crédito do cliente ${client.nome}!\nLimite: R$ ${client.limite_credito.toFixed(2)}\nSaldo Devedor Atual: R$ ${(client.saldo_devedor || 0).toFixed(2)}\nValor da Venda: R$ ${total.toFixed(2)}\nTotal Acumulado: R$ ${totalComDebito.toFixed(2)}`);
+          return;
+        }
+      }
+    }
+
     const cardFeePct = parseFloat(cardSettings.taxaMaquinaCredito) || 0;
     const isCredit = paymentMethod === 'credito';
     const cardFeeVal = isCredit ? parseFloat((total * (cardFeePct / 100)).toFixed(2)) : 0;
@@ -515,7 +552,8 @@ export default function PDV() {
       subtotal,
       forma_pagamento: paymentMethod,
       troco: paymentMethod === 'dinheiro' ? change : 0,
-      pago: paymentMethod === 'dinheiro' ? parseFloat(cashPaid || saleFinalTotal) : saleFinalTotal
+      pago: paymentMethod === 'dinheiro' ? parseFloat(cashPaid || saleFinalTotal) : saleFinalTotal,
+      cliente_id: paymentMethod === 'fiado' && selectedClientId ? parseInt(selectedClientId, 10) : null
     };
 
     const itemsPayload = items.map(item => ({
@@ -605,8 +643,21 @@ export default function PDV() {
             <div class="divider"></div>
             <div class="row">
               <span>F. Pagamento:</span>
-              <span class="bold">${paymentMethod.toUpperCase()}</span>
+              <span class="bold">${paymentMethod === 'fiado' ? 'FIADO (A PRAZO)' : paymentMethod.toUpperCase()}</span>
             </div>
+            ${paymentMethod === 'fiado' && selectedClientId ? (() => {
+              const client = clients.find(c => c.id === parseInt(selectedClientId, 10));
+              return client ? `
+                <div class="row">
+                  <span>Cliente:</span>
+                  <span class="bold">${client.nome.toUpperCase()}</span>
+                </div>
+                <div class="row">
+                  <span>Divida Acumulada:</span>
+                  <span class="bold">R$ ${((client.saldo_devedor || 0) + saleFinalTotal).toFixed(2)}</span>
+                </div>
+              ` : '';
+            })() : ''}
             ${paymentMethod === 'dinheiro' ? `
               <div class="row">
                 <span>Valor Pago:</span>
@@ -1014,6 +1065,20 @@ export default function PDV() {
                     <CreditCard size={24} className="mb-2" />
                     <span className="text-xs font-bold uppercase">Cartão Crédito</span>
                   </button>
+
+                  <button
+                    onClick={() => setPaymentMethod('fiado')}
+                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all col-span-2 ${
+                      paymentMethod === 'fiado'
+                        ? 'border-brand-accent bg-brand-accent/10 text-white'
+                        : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <User size={18} className={paymentMethod === 'fiado' ? 'text-brand-accent' : 'text-gray-400'} />
+                      <span className="text-xs font-bold uppercase">Venda Fiada / Prazo</span>
+                    </div>
+                  </button>
                 </div>
               </div>
 
@@ -1128,6 +1193,80 @@ export default function PDV() {
                           <p className="text-xs text-gray-400 font-bold leading-normal">
                             Insira ou aproxime o cartão na maquininha do estabelecimento.
                           </p>
+                        </div>
+                      )}
+
+                      {/* Fiado (Prazo) option: Select client and show balance info */}
+                      {paymentMethod === 'fiado' && (
+                        <div className="space-y-4 text-left">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase block">Selecionar Cliente</label>
+                            
+                            <select
+                              value={selectedClientId}
+                              onChange={(e) => {
+                                const cId = e.target.value;
+                                setSelectedClientId(cId);
+                                if (cId) {
+                                  const cObj = clients.find(c => c.id === parseInt(cId, 10));
+                                  setSelectedClient(cObj);
+                                } else {
+                                  setSelectedClient(null);
+                                }
+                              }}
+                              className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-3 text-xs font-bold text-white outline-none"
+                            >
+                              <option value="">-- Selecione o Cliente --</option>
+                              {clients.map(c => (
+                                <option key={c.id} value={c.id}>
+                                  {c.nome} {c.cpf ? `(${c.cpf})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {selectedClient && (
+                            <div className="p-4 rounded-xl bg-brand-dark/40 border border-brand-border/60 space-y-2 animate-in fade-in duration-200 text-xs font-semibold">
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-500 uppercase text-[9px] font-bold">Saldo Devedor:</span>
+                                <span className="text-brand-warning font-black">R$ {(selectedClient.saldo_devedor || 0).toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-500 uppercase text-[9px] font-bold">Limite de Crédito:</span>
+                                <span className="text-white font-bold">
+                                  {selectedClient.limite_credito > 0 
+                                    ? `R$ ${selectedClient.limite_credito.toFixed(2)}` 
+                                    : 'Sem Limite'
+                                  }
+                                </span>
+                              </div>
+                              <div className="border-t border-brand-border/40 pt-2 flex justify-between items-center">
+                                <span className="text-gray-500 uppercase text-[9px] font-bold">Limite Disponível:</span>
+                                <span className={`font-black ${
+                                  (selectedClient.limite_credito > 0 && (selectedClient.limite_credito - (selectedClient.saldo_devedor || 0) - total) < 0)
+                                    ? 'text-brand-danger font-black animate-pulse'
+                                    : 'text-brand-success font-black'
+                                }`}>
+                                  {selectedClient.limite_credito > 0 
+                                    ? `R$ ${Math.max(0, selectedClient.limite_credito - (selectedClient.saldo_devedor || 0)).toFixed(2)}` 
+                                    : 'Ilimitado'
+                                  }
+                                </span>
+                              </div>
+
+                              {selectedClient.limite_credito > 0 && (selectedClient.limite_credito - (selectedClient.saldo_devedor || 0) - total) < 0 && (
+                                <div className="text-[10px] text-brand-danger font-black text-center mt-1 border-t border-brand-danger/20 pt-1.5 leading-tight">
+                                  VALOR DA VENDA EXCEDE O LIMITE DISPONÍVEL!
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {clients.length === 0 && (
+                            <div className="text-[10px] text-brand-warning font-bold text-center leading-normal p-2 bg-brand-warning/10 border border-brand-warning/20 rounded-xl">
+                              Nenhum cliente cadastrado no sistema. Cadastre clientes no painel administrativo retaguarda.
+                            </div>
+                          )}
                         </div>
                       )}
                     </>

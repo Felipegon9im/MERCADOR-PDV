@@ -17,6 +17,7 @@ import Relatorios from './pages/Relatorios';
 import Backup from './pages/Backup';
 import Config from './pages/Config';
 import LicencaBloqueio from './pages/LicencaBloqueio';
+import Clientes from './pages/Clientes';
 
 // Protected Route wrapper for Auth
 function ProtectedRoute({ children, allowedRoles }) {
@@ -94,6 +95,14 @@ export default function App() {
           <ProtectedRoute allowedRoles={['admin', 'gerente']}>
             <AdminLayout>
               <Estoque />
+            </AdminLayout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/admin/clientes" element={
+          <ProtectedRoute allowedRoles={['admin', 'gerente']}>
+            <AdminLayout>
+              <Clientes />
             </AdminLayout>
           </ProtectedRoute>
         } />

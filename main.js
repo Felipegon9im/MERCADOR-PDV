@@ -92,6 +92,26 @@ app.whenReady().then(() => {
     return dbService.excluirProduto(id, usuarioId);
   });
 
+  ipcMain.handle('db:getClientes', async () => {
+    return dbService.getClientes();
+  });
+
+  ipcMain.handle('db:salvarCliente', async (event, cliente) => {
+    return dbService.salvarCliente(cliente);
+  });
+
+  ipcMain.handle('db:lancarPagamentoCliente', async (event, clienteId, valor, formaPagamento, usuarioId) => {
+    return dbService.lancarPagamentoCliente(clienteId, valor, formaPagamento, usuarioId);
+  });
+
+  ipcMain.handle('db:getClientePagamentos', async (event, clienteId) => {
+    return dbService.getClientePagamentos(clienteId);
+  });
+
+  ipcMain.handle('db:getClienteExtrato', async (event, clienteId) => {
+    return dbService.getClienteExtrato(clienteId);
+  });
+
   // Sales
   ipcMain.handle('sales:criarVenda', async (event, venda, itens, usuarioId) => {
     return dbService.criarVenda(venda, itens, usuarioId);

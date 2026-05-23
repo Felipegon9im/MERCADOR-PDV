@@ -10,7 +10,8 @@ import {
   LogOut, 
   ShoppingBag,
   User,
-  Settings
+  Settings,
+  Users
 } from 'lucide-react';
 
 import useLicenseStore from '../store/useLicenseStore';
@@ -18,6 +19,7 @@ import useLicenseStore from '../store/useLicenseStore';
 const menuItems = [
   { path: '/admin', name: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'gerente'] },
   { path: '/admin/estoque', name: 'Estoque', icon: Package, roles: ['admin', 'gerente'] },
+  { path: '/admin/clientes', name: 'Clientes & Fiado', icon: Users, roles: ['admin', 'gerente'] },
   { path: '/admin/xml', name: 'Importar XML', icon: FileCode, roles: ['admin', 'gerente'] },
   { path: '/admin/relatorios', name: 'Relatórios', icon: BarChart3, roles: ['admin', 'gerente'] },
   { path: '/admin/backup', name: 'Sistema & Backup', icon: Database, roles: ['admin'] },

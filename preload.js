@@ -22,7 +22,13 @@ contextBridge.exposeInMainWorld('api', {
     ajustarEstoque: (produtoId, quantidade, tipo, motivo, usuarioId) => 
       ipcRenderer.invoke('db:ajustarEstoque', produtoId, quantidade, tipo, motivo, usuarioId),
     getMovimentacoesEstoque: () => ipcRenderer.invoke('db:getMovimentacoesEstoque'),
-    excluirProduto: (id, usuarioId) => ipcRenderer.invoke('db:excluirProduto', id, usuarioId)
+    excluirProduto: (id, usuarioId) => ipcRenderer.invoke('db:excluirProduto', id, usuarioId),
+    getClientes: () => ipcRenderer.invoke('db:getClientes'),
+    salvarCliente: (cliente) => ipcRenderer.invoke('db:salvarCliente', cliente),
+    lancarPagamentoCliente: (clienteId, valor, formaPagamento, usuarioId) => 
+      ipcRenderer.invoke('db:lancarPagamentoCliente', clienteId, valor, formaPagamento, usuarioId),
+    getClientePagamentos: (clienteId) => ipcRenderer.invoke('db:getClientePagamentos', clienteId),
+    getClienteExtrato: (clienteId) => ipcRenderer.invoke('db:getClienteExtrato', clienteId)
   },
   
   // Sales & Dashboard

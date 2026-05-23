@@ -170,6 +170,67 @@ if (typeof db.exec === 'function') {
     db.exec("ALTER TABLE estoque_movimentacoes ADD COLUMN categoria_id INTEGER;");
   } catch (err) {}
 
+  // Auto-migration for existing SQLite databases to support client credit sales (Fiado)
+  try {
+    const tableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='vendas'").get()?.sql || "";
+    if (tableSql && !tableSql.includes("'fiado'")) {
+      console.log("Migrating 'vendas' table to support 'fiado' payment method...");
+      db.exec(`
+        BEGIN TRANSACTION;
+        ALTER TABLE vendas RENAME TO vendas_old;
+        CREATE TABLE vendas (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          usuario_id INTEGER,
+          total REAL NOT NULL,
+          desconto REAL DEFAULT 0,
+          subtotal REAL NOT NULL,
+          forma_pagamento TEXT CHECK(forma_pagamento IN ('dinheiro', 'pix', 'debito', 'credito', 'fiado')) NOT NULL,
+          troco REAL DEFAULT 0,
+          pago REAL DEFAULT 0,
+          data_venda TEXT DEFAULT CURRENT_TIMESTAMP,
+          cliente_id INTEGER,
+          FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+          FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+        );
+        INSERT INTO vendas (id, usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, data_venda, cliente_id)
+        SELECT id, usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, data_venda, NULL FROM vendas_old;
+        DROP TABLE vendas_old;
+        COMMIT;
+      `);
+      console.log("Vendas table successfully migrated.");
+    }
+  } catch (err) {
+    console.error("Failed to migrate 'vendas' table:", err);
+    try { db.exec("ROLLBACK;"); } catch(e) {}
+  }
+
+  // Create clientes and cliente_pagamentos tables if they don't exist
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS clientes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        telefone TEXT,
+        cpf TEXT,
+        limite_credito REAL DEFAULT 0,
+        saldo_devedor REAL DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS cliente_pagamentos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cliente_id INTEGER,
+        valor REAL NOT NULL,
+        forma_pagamento TEXT CHECK(forma_pagamento IN ('dinheiro', 'pix', 'debito', 'credito')) NOT NULL,
+        usuario_id INTEGER,
+        data_pagamento TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+      );
+    `);
+  } catch (err) {
+    console.error("Failed to create client-related tables:", err);
+  }
+
   // Seed default data if empty
   const userCount = db.prepare('SELECT count(*) as count FROM usuarios').get().count;
   if (userCount === 0) {
@@ -264,6 +325,14 @@ function initJsonDbFallback(dbPath) {
           }
         });
       }
+      if (!Array.isArray(data.clientes)) {
+        data.clientes = [];
+        migrated = true;
+      }
+      if (!Array.isArray(data.cliente_pagamentos)) {
+        data.cliente_pagamentos = [];
+        migrated = true;
+      }
       if (migrated) save();
     } catch (e) {
       console.error("Corrupted JSON DB, recreating", e);
@@ -272,6 +341,8 @@ function initJsonDbFallback(dbPath) {
   } else {
     // Seed JSON fallback
     const hash = (pass) => crypto.pbkdf2Sync(pass, 'pdv_salt_key', 1000, 64, 'sha512').toString('hex');
+    data.clientes = [];
+    data.cliente_pagamentos = [];
     data.usuarios.push(
       { id: 1, username: 'admin', password: hash('admin123'), role: 'admin', name: 'Administrador', active: 1, created_at: new Date().toISOString() },
       { id: 2, username: 'gerente', password: hash('gerente123'), role: 'gerente', name: 'Gerente Geral', active: 1, created_at: new Date().toISOString() },
@@ -806,9 +877,19 @@ const dbService = {
         forma_pagamento: venda.forma_pagamento,
         troco: venda.troco || 0,
         pago: venda.pago || 0,
-        data_venda: dataVenda
+        data_venda: dataVenda,
+        cliente_id: venda.cliente_id || null
       };
       db._data.vendas.push(novaVenda);
+
+      // Update customer debt if payment method is 'fiado'
+      if (venda.forma_pagamento === 'fiado' && venda.cliente_id) {
+        if (!db._data.clientes) db._data.clientes = [];
+        const cIdx = db._data.clientes.findIndex(c => c.id === venda.cliente_id);
+        if (cIdx !== -1) {
+          db._data.clientes[cIdx].saldo_devedor = parseFloat(((db._data.clientes[cIdx].saldo_devedor || 0) + venda.total).toFixed(2));
+        }
+      }
 
       itens.forEach(item => {
         const itemId = db._data.itens_venda.length ? Math.max(...db._data.itens_venda.map(i => i.id)) + 1 : 1;
@@ -863,8 +944,8 @@ const dbService = {
     // SQLite Transaction
     const transaction = db.transaction(() => {
       const stmtVenda = db.prepare(`
-        INSERT INTO vendas (usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO vendas (usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, cliente_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const result = stmtVenda.run(
           usuarioId,
@@ -873,9 +954,16 @@ const dbService = {
           venda.subtotal,
           venda.forma_pagamento,
           venda.troco || 0,
-          venda.pago || 0
+          venda.pago || 0,
+          venda.cliente_id || null
       );
       const vendaId = result.lastInsertRowid;
+
+      // Update customer debt if payment method is 'fiado'
+      if (venda.forma_pagamento === 'fiado' && venda.cliente_id) {
+        db.prepare('UPDATE clientes SET saldo_devedor = saldo_devedor + ? WHERE id = ?')
+          .run(venda.total, venda.cliente_id);
+      }
 
       const stmtItem = db.prepare(`
         INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario, total_item)
@@ -927,13 +1015,15 @@ const dbService = {
     if (db.isJson) {
       return db._data.vendas.map(v => {
         const u = db._data.usuarios.find(u => u.id === v.usuario_id);
-        return { ...v, usuario_nome: u ? u.name : 'Desconhecido' };
+        const c = v.cliente_id && db._data.clientes ? db._data.clientes.find(c => c.id === v.cliente_id) : null;
+        return { ...v, usuario_nome: u ? u.name : 'Desconhecido', cliente_nome: c ? c.nome : null };
       }).reverse();
     }
     return db.prepare(`
-      SELECT v.*, u.name as usuario_nome
+      SELECT v.*, u.name as usuario_nome, c.nome as cliente_nome
       FROM vendas v
       LEFT JOIN usuarios u ON v.usuario_id = u.id
+      LEFT JOIN clientes c ON v.cliente_id = c.id
       ORDER BY v.id DESC
     `).all();
   },
@@ -943,6 +1033,7 @@ const dbService = {
       const venda = db._data.vendas.find(v => v.id === vendaId);
       if (!venda) return null;
       const u = db._data.usuarios.find(u => u.id === venda.usuario_id);
+      const c = venda.cliente_id && db._data.clientes ? db._data.clientes.find(c => c.id === venda.cliente_id) : null;
       const itens = db._data.itens_venda
         .filter(iv => iv.venda_id === vendaId)
         .map(iv => {
@@ -954,12 +1045,18 @@ const dbService = {
           };
         });
       return {
-        venda: { ...venda, usuario_nome: u ? u.name : 'Desconhecido' },
+        venda: { ...venda, usuario_nome: u ? u.name : 'Desconhecido', cliente_nome: c ? c.nome : null },
         itens
       };
     }
 
-    const venda = db.prepare('SELECT v.*, u.name as usuario_nome FROM vendas v LEFT JOIN usuarios u ON v.usuario_id = u.id WHERE v.id = ?').get(vendaId);
+    const venda = db.prepare(`
+      SELECT v.*, u.name as usuario_nome, c.nome as cliente_nome 
+      FROM vendas v 
+      LEFT JOIN usuarios u ON v.usuario_id = u.id 
+      LEFT JOIN clientes c ON v.cliente_id = c.id 
+      WHERE v.id = ?
+    `).get(vendaId);
     if (!venda) return null;
 
     const itens = db.prepare(`
@@ -1364,7 +1461,183 @@ const dbService = {
       console.error("Erro ao excluir produto:", err);
       return { success: false, message: err.message };
     }
+  },
+
+  // CLIENTS & FIADO
+  getClientes: () => {
+    if (db.isJson) {
+      return db._data.clientes || [];
+    }
+    return db.prepare('SELECT * FROM clientes ORDER BY nome ASC').all();
+  },
+
+  salvarCliente: (cliente) => {
+    const { id, nome, telefone, cpf, limite_credito, saldo_devedor } = cliente;
+    if (db.isJson) {
+      if (!db._data.clientes) db._data.clientes = [];
+      if (id) {
+        const idx = db._data.clientes.findIndex(c => c.id === id);
+        if (idx !== -1) {
+          db._data.clientes[idx] = {
+            ...db._data.clientes[idx],
+            nome,
+            telefone,
+            cpf,
+            limite_credito: parseFloat(limite_credito || 0),
+            saldo_devedor: parseFloat(saldo_devedor !== undefined ? saldo_devedor : db._data.clientes[idx].saldo_devedor || 0)
+          };
+          db._save();
+          return { id };
+        }
+      } else {
+        const newId = db._data.clientes.length ? Math.max(...db._data.clientes.map(c => c.id)) + 1 : 1;
+        const newC = {
+          id: newId,
+          nome,
+          telefone,
+          cpf,
+          limite_credito: parseFloat(limite_credito || 0),
+          saldo_devedor: parseFloat(saldo_devedor || 0),
+          created_at: new Date().toISOString()
+        };
+        db._data.clientes.push(newC);
+        db._save();
+        return newC;
+      }
+    }
+
+    if (id) {
+      const stmt = db.prepare('UPDATE clientes SET nome = ?, telefone = ?, cpf = ?, limite_credito = ?, saldo_devedor = ? WHERE id = ?');
+      stmt.run(nome, telefone, cpf, parseFloat(limite_credito || 0), parseFloat(saldo_devedor || 0), id);
+      return { id };
+    } else {
+      const stmt = db.prepare('INSERT INTO clientes (nome, telefone, cpf, limite_credito, saldo_devedor) VALUES (?, ?, ?, ?, ?)');
+      const result = stmt.run(nome, telefone, cpf, parseFloat(limite_credito || 0), parseFloat(saldo_devedor || 0));
+      return { id: result.lastInsertRowid, nome, telefone, cpf, limite_credito, saldo_devedor };
+    }
+  },
+
+  lancarPagamentoCliente: (clienteId, valor, formaPagamento, usuarioId = 1) => {
+    const valorNum = parseFloat(valor);
+    if (db.isJson) {
+      if (!db._data.cliente_pagamentos) db._data.cliente_pagamentos = [];
+      
+      const cIdx = db._data.clientes.findIndex(c => c.id === clienteId);
+      if (cIdx === -1) throw new Error("Cliente não encontrado");
+
+      // Update debt
+      db._data.clientes[cIdx].saldo_devedor = parseFloat((db._data.clientes[cIdx].saldo_devedor - valorNum).toFixed(2));
+
+      // Record payment
+      const pId = db._data.cliente_pagamentos.length ? Math.max(...db._data.cliente_pagamentos.map(p => p.id)) + 1 : 1;
+      const dataP = new Date().toISOString();
+      db._data.cliente_pagamentos.push({
+        id: pId,
+        cliente_id: clienteId,
+        valor: valorNum,
+        forma_pagamento: formaPagamento,
+        usuario_id: usuarioId,
+        data_pagamento: dataP
+      });
+
+      db._save();
+      dbService.logAcao(usuarioId, 'PAGAMENTO_CLIENTE', `Recebimento de fiado do cliente #${clienteId}. Valor: R$ ${valorNum.toFixed(2)}`);
+      return { success: true, novoSaldo: db._data.clientes[cIdx].saldo_devedor };
+    }
+
+    const transaction = db.transaction(() => {
+      // Get current debt
+      const c = db.prepare('SELECT saldo_devedor FROM clientes WHERE id = ?').get(clienteId);
+      if (!c) throw new Error("Cliente não encontrado");
+
+      const novoSaldo = parseFloat((c.saldo_devedor - valorNum).toFixed(2));
+
+      // Update customer debt
+      db.prepare('UPDATE clientes SET saldo_devedor = ? WHERE id = ?').run(novoSaldo, clienteId);
+
+      // Record payment
+      db.prepare('INSERT INTO cliente_pagamentos (cliente_id, valor, forma_pagamento, usuario_id) VALUES (?, ?, ?, ?)')
+        .run(clienteId, valorNum, formaPagamento, usuarioId);
+
+      return novoSaldo;
+    });
+
+    const novoSaldo = transaction();
+    dbService.logAcao(usuarioId, 'PAGAMENTO_CLIENTE', `Recebimento de fiado do cliente #${clienteId}. Valor: R$ ${valorNum.toFixed(2)}`);
+    return { success: true, novoSaldo };
+  },
+
+  getClientePagamentos: (clienteId) => {
+    if (db.isJson) {
+      if (!db._data.cliente_pagamentos) return [];
+      return db._data.cliente_pagamentos
+        .filter(p => p.cliente_id === clienteId)
+        .map(p => {
+          const u = db._data.usuarios.find(user => user.id === p.usuario_id);
+          return { ...p, usuario_nome: u ? u.name : 'Desconhecido' };
+        }).reverse();
+    }
+    return db.prepare(`
+      SELECT p.*, u.name as usuario_nome
+      FROM cliente_pagamentos p
+      LEFT JOIN usuarios u ON p.usuario_id = u.id
+      WHERE p.cliente_id = ?
+      ORDER BY p.id DESC
+    `).all(clienteId);
+  },
+
+  getClienteExtrato: (clienteId) => {
+    let extrato = [];
+
+    if (db.isJson) {
+      const cliente = db._data.clientes.find(c => c.id === clienteId);
+      if (!cliente) return null;
+
+      // Purchases
+      const compras = db._data.vendas
+        .filter(v => v.cliente_id === clienteId && v.forma_pagamento === 'fiado')
+        .map(v => ({
+          tipo: 'compra',
+          id: v.id,
+          valor: v.total,
+          data: v.data_venda,
+          descricao: `Compra #${v.id}`
+        }));
+
+      // Payments
+      const pagamentos = (db._data.cliente_pagamentos || [])
+        .filter(p => p.cliente_id === clienteId)
+        .map(p => ({
+          tipo: 'pagamento',
+          id: p.id,
+          valor: p.valor,
+          data: p.data_pagamento,
+          descricao: `Pagamento (${p.forma_pagamento.toUpperCase()})`
+        }));
+
+      extrato = [...compras, ...pagamentos].sort((a, b) => new Date(b.data) - new Date(a.data));
+      return { cliente, extrato };
+    }
+
+    const cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get(clienteId);
+    if (!cliente) return null;
+
+    const compras = db.prepare(`
+      SELECT 'compra' as tipo, id, total as valor, data_venda as data, 'Compra #' || id as descricao
+      FROM vendas
+      WHERE cliente_id = ? AND forma_pagamento = 'fiado'
+    `).all(clienteId);
+
+    const pagamentos = db.prepare(`
+      SELECT 'pagamento' as tipo, id, valor, data_pagamento as data, 'Pagamento (' || upper(forma_pagamento) || ')' as descricao
+      FROM cliente_pagamentos
+      WHERE cliente_id = ?
+    `).all(clienteId);
+
+    extrato = [...compras, ...pagamentos].sort((a, b) => new Date(b.data) - new Date(a.data));
+    return { cliente, extrato };
   }
+}
 };
 
 module.exports = dbService;

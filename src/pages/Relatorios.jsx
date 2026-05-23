@@ -104,8 +104,14 @@ export default function Relatorios() {
           <div class="divider"></div>
           <div class="row">
             <span>F. Pagamento:</span>
-            <span class="bold">${venda.forma_pagamento.toUpperCase()}</span>
+            <span class="bold">${venda.forma_pagamento === 'fiado' ? 'FIADO (A PRAZO)' : venda.forma_pagamento.toUpperCase()}</span>
           </div>
+          ${venda.forma_pagamento === 'fiado' && venda.cliente_nome ? `
+            <div class="row">
+              <span>Cliente:</span>
+              <span class="bold">${venda.cliente_nome.toUpperCase()}</span>
+            </div>
+          ` : ''}
           ${venda.forma_pagamento === 'dinheiro' ? `
             <div class="row">
               <span>Valor Pago:</span>
@@ -226,6 +232,7 @@ export default function Relatorios() {
             <option value="pix">PIX QR Code</option>
             <option value="debito">Débito</option>
             <option value="credito">Crédito</option>
+            <option value="fiado">Fiado (A Prazo)</option>
           </select>
         </div>
 
@@ -260,8 +267,12 @@ export default function Relatorios() {
                     {new Date(v.data_venda).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </td>
                   <td className="py-4 px-4">
-                    <span className="uppercase text-[10px] bg-brand-border/60 px-2 py-0.5 rounded border border-brand-border">
-                      {v.forma_pagamento}
+                    <span className={`uppercase text-[10px] px-2 py-0.5 rounded border ${
+                      v.forma_pagamento === 'fiado' 
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' 
+                        : 'bg-brand-border/60 text-gray-300 border-brand-border'
+                    }`}>
+                      {v.forma_pagamento === 'fiado' ? `Fiado: ${v.cliente_nome || 'Cliente'}` : v.forma_pagamento}
                     </span>
                   </td>
                   <td className="py-4 px-4 text-right text-brand-danger">R$ {v.desconto.toFixed(2)}</td>
