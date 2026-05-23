@@ -996,6 +996,7 @@ const dbService = {
 
     // SQLite Transaction
     const transaction = db.transaction(() => {
+      const dataVenda = new Date().toISOString();
       const stmtVenda = db.prepare(`
         INSERT INTO vendas (usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, cliente_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
