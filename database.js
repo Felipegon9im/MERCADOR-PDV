@@ -41,6 +41,9 @@ if (typeof db.exec === 'function') {
     CREATE TABLE IF NOT EXISTS categorias (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nome TEXT UNIQUE NOT NULL,
+      controle_estoque INTEGER DEFAULT 0,
+      estoque_atual REAL DEFAULT 0,
+      preco_custo REAL DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -86,12 +89,14 @@ if (typeof db.exec === 'function') {
     CREATE TABLE IF NOT EXISTS estoque_movimentacoes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       produto_id INTEGER,
+      categoria_id INTEGER,
       quantidade REAL NOT NULL,
       tipo TEXT CHECK(tipo IN ('entrada', 'saida', 'ajuste')) NOT NULL,
       motivo TEXT,
       usuario_id INTEGER,
       data_movimentacao TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (produto_id) REFERENCES produtos(id),
+      FOREIGN KEY (categoria_id) REFERENCES categorias(id),
       FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
     );
 
@@ -149,6 +154,22 @@ if (typeof db.exec === 'function') {
     // Column already exists or table doesn't exist yet, ignore
   }
 
+  // Auto-migration for existing SQLite databases to add category-level inventory columns
+  try {
+    db.exec("ALTER TABLE categorias ADD COLUMN controle_estoque INTEGER DEFAULT 0;");
+  } catch (err) {}
+  try {
+    db.exec("ALTER TABLE categorias ADD COLUMN estoque_atual REAL DEFAULT 0;");
+  } catch (err) {}
+  try {
+    db.exec("ALTER TABLE categorias ADD COLUMN preco_custo REAL DEFAULT 0;");
+  } catch (err) {}
+
+  // Auto-migration for existing SQLite databases to add category_id to movements
+  try {
+    db.exec("ALTER TABLE estoque_movimentacoes ADD COLUMN categoria_id INTEGER;");
+  } catch (err) {}
+
   // Seed default data if empty
   const userCount = db.prepare('SELECT count(*) as count FROM usuarios').get().count;
   if (userCount === 0) {
@@ -205,7 +226,7 @@ function initJsonDbFallback(dbPath) {
   if (fs.existsSync(jsonPath)) {
     try {
       data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-      // Autocura migration for JSON fallback products:
+      // Autocura migration for JSON fallback products and categories:
       let migrated = false;
       if (Array.isArray(data.produtos)) {
         data.produtos.forEach(p => {
@@ -215,6 +236,30 @@ function initJsonDbFallback(dbPath) {
           }
           if (!p.tipo_produto) {
             p.tipo_produto = p.unidade === 'KG' ? 'KG' : 'UNIDADE';
+            migrated = true;
+          }
+        });
+      }
+      if (Array.isArray(data.categorias)) {
+        data.categorias.forEach(c => {
+          if (c.controle_estoque === undefined) {
+            c.controle_estoque = 0;
+            migrated = true;
+          }
+          if (c.estoque_atual === undefined) {
+            c.estoque_atual = 0;
+            migrated = true;
+          }
+          if (c.preco_custo === undefined) {
+            c.preco_custo = 0;
+            migrated = true;
+          }
+        });
+      }
+      if (Array.isArray(data.estoque_movimentacoes)) {
+        data.estoque_movimentacoes.forEach(m => {
+          if (m.categoria_id === undefined) {
+            m.categoria_id = null;
             migrated = true;
           }
         });
@@ -364,23 +409,111 @@ const dbService = {
     return db.prepare('SELECT * FROM categorias ORDER BY nome ASC').all();
   },
 
-  salvarCategoria: (nome) => {
-    if (db.isJson) {
-      const exists = db._data.categorias.find(c => c.nome.toLowerCase() === nome.toLowerCase());
-      if (exists) return exists;
-      const newId = db._data.categorias.length ? Math.max(...db._data.categorias.map(c => c.id)) + 1 : 1;
-      const cat = { id: newId, nome, created_at: new Date().toISOString() };
-      db._data.categorias.push(cat);
-      db._save();
-      return cat;
-    }
-    const checkStmt = db.prepare('SELECT * FROM categorias WHERE nome = ?');
-    const existing = checkStmt.get(nome);
-    if (existing) return existing;
+  salvarCategoria: (catData) => {
+    const data = typeof catData === 'string' ? { nome: catData } : catData;
+    const { id, nome, controle_estoque, estoque_atual, preco_custo } = data;
 
-    const stmt = db.prepare('INSERT INTO categorias (nome) VALUES (?)');
-    const result = stmt.run(nome);
-    return { id: result.lastInsertRowid, nome };
+    if (db.isJson) {
+      if (id) {
+        const idx = db._data.categorias.findIndex(c => c.id === id);
+        if (idx !== -1) {
+          db._data.categorias[idx].nome = nome;
+          db._data.categorias[idx].controle_estoque = controle_estoque || 0;
+          db._data.categorias[idx].estoque_atual = estoque_atual || 0;
+          db._data.categorias[idx].preco_custo = preco_custo || 0;
+          db._save();
+          return { id };
+        }
+      } else {
+        const exists = db._data.categorias.find(c => c.nome.toLowerCase() === nome.toLowerCase());
+        if (exists) return exists;
+        const newId = db._data.categorias.length ? Math.max(...db._data.categorias.map(c => c.id)) + 1 : 1;
+        const cat = { 
+          id: newId, 
+          nome, 
+          controle_estoque: controle_estoque || 0, 
+          estoque_atual: estoque_atual || 0, 
+          preco_custo: preco_custo || 0, 
+          created_at: new Date().toISOString() 
+        };
+        db._data.categorias.push(cat);
+        db._save();
+        return cat;
+      }
+    }
+
+    if (id) {
+      const stmt = db.prepare('UPDATE categorias SET nome = ?, controle_estoque = ?, estoque_atual = ?, preco_custo = ? WHERE id = ?');
+      stmt.run(nome, controle_estoque || 0, estoque_atual || 0, preco_custo || 0, id);
+      return { id };
+    } else {
+      const checkStmt = db.prepare('SELECT * FROM categorias WHERE nome = ?');
+      const existing = checkStmt.get(nome);
+      if (existing) return existing;
+
+      const stmt = db.prepare('INSERT INTO categorias (nome, controle_estoque, estoque_atual, preco_custo) VALUES (?, ?, ?, ?)');
+      const result = stmt.run(nome, controle_estoque || 0, estoque_atual || 0, preco_custo || 0);
+      return { id: result.lastInsertRowid, nome };
+    }
+  },
+
+  ajustarEstoqueCategoria: (categoriaId, quantidade, tipo, motivo, usuarioId) => {
+    if (db.isJson) {
+      const idx = db._data.categorias.findIndex(c => c.id === categoriaId);
+      if (idx !== -1) {
+        const c = db._data.categorias[idx];
+        const oldStock = c.estoque_atual || 0;
+        let newStock = oldStock;
+        let qtyMov = quantidade;
+
+        if (tipo === 'entrada') {
+          newStock += quantidade;
+        } else if (tipo === 'saida') {
+          newStock -= quantidade;
+        } else if (tipo === 'ajuste') {
+          qtyMov = quantidade - oldStock;
+          newStock = quantidade;
+        }
+
+        db._data.categorias[idx].estoque_atual = newStock;
+        
+        db._data.estoque_movimentacoes.push({
+          id: db._data.estoque_movimentacoes.length + 1,
+          produto_id: null,
+          categoria_id: categoriaId,
+          quantidade: qtyMov,
+          tipo,
+          motivo,
+          usuario_id: usuarioId,
+          data_movimentacao: new Date().toISOString()
+        });
+        db._save();
+        return { success: true, novoEstoque: newStock };
+      }
+      return { success: false };
+    }
+
+    const c = db.prepare('SELECT estoque_atual FROM categorias WHERE id = ?').get(categoriaId);
+    if (!c) return { success: false };
+
+    const oldStock = c.estoque_atual || 0;
+    let newStock = oldStock;
+    let qtyMov = quantidade;
+
+    if (tipo === 'entrada') {
+      newStock += quantidade;
+    } else if (tipo === 'saida') {
+      newStock -= quantidade;
+    } else if (tipo === 'ajuste') {
+      qtyMov = quantidade - oldStock;
+      newStock = quantidade;
+    }
+
+    db.prepare('UPDATE categorias SET estoque_atual = ? WHERE id = ?').run(newStock, categoriaId);
+    db.prepare('INSERT INTO estoque_movimentacoes (produto_id, categoria_id, quantidade, tipo, motivo, usuario_id) VALUES (NULL, ?, ?, ?, ?, ?)')
+      .run(categoriaId, qtyMov, tipo, motivo, usuarioId);
+
+    return { success: true, novoEstoque: newStock };
   },
 
   // Products
@@ -388,15 +521,32 @@ const dbService = {
     if (db.isJson) {
       return db._data.produtos.map(p => {
         const cat = db._data.categorias.find(c => c.id === p.categoria_id);
-        return { ...p, categoria_nome: cat ? cat.nome : '' };
+        let estoque_atual = p.estoque_atual;
+        if (cat && cat.controle_estoque === 1) {
+          estoque_atual = cat.estoque_atual || 0;
+        }
+        return { 
+          ...p, 
+          categoria_nome: cat ? cat.nome : '', 
+          estoque_atual,
+          controle_estoque_categoria: cat && cat.controle_estoque === 1 ? 1 : 0
+        };
       });
     }
     return db.prepare(`
-      SELECT p.*, c.nome as categoria_nome 
+      SELECT p.*, c.nome as categoria_nome, c.controle_estoque as cat_controle_estoque, c.estoque_atual as cat_estoque_atual
       FROM produtos p 
       LEFT JOIN categorias c ON p.categoria_id = c.id
       ORDER BY p.nome ASC
-    `).all();
+    `).all().map(p => {
+      if (p.cat_controle_estoque === 1) {
+        p.estoque_atual = p.cat_estoque_atual || 0;
+        p.controle_estoque_categoria = 1;
+      } else {
+        p.controle_estoque_categoria = 0;
+      }
+      return p;
+    });
   },
 
   buscarProdutoPorCodigo: (codigo) => {
@@ -404,11 +554,36 @@ const dbService = {
       const p = db._data.produtos.find(p => p.codigo_barras === codigo);
       if (p) {
         const cat = db._data.categorias.find(c => c.id === p.categoria_id);
-        return { ...p, categoria_nome: cat ? cat.nome : '' };
+        let estoque_atual = p.estoque_atual;
+        if (cat && cat.controle_estoque === 1) {
+          estoque_atual = cat.estoque_atual || 0;
+        }
+        return { 
+          ...p, 
+          categoria_nome: cat ? cat.nome : '', 
+          estoque_atual,
+          controle_estoque_categoria: cat && cat.controle_estoque === 1 ? 1 : 0
+        };
       }
       return null;
     }
-    return db.prepare('SELECT p.*, c.nome as categoria_nome FROM produtos p LEFT JOIN categorias c ON p.categoria_id = c.id WHERE p.codigo_barras = ?').get(codigo) || null;
+    const p = db.prepare(`
+      SELECT p.*, c.nome as categoria_nome, c.controle_estoque as cat_controle_estoque, c.estoque_atual as cat_estoque_atual
+      FROM produtos p
+      LEFT JOIN categorias c ON p.categoria_id = c.id
+      WHERE p.codigo_barras = ?
+    `).get(codigo);
+    
+    if (p) {
+      if (p.cat_controle_estoque === 1) {
+        p.estoque_atual = p.cat_estoque_atual || 0;
+        p.controle_estoque_categoria = 1;
+      } else {
+        p.controle_estoque_categoria = 0;
+      }
+      return p;
+    }
+    return null;
   },
 
   salvarProduto: (product, usuarioId = 1) => {
@@ -483,6 +658,39 @@ const dbService = {
       const idx = db._data.produtos.findIndex(p => p.id === produtoId);
       if (idx !== -1) {
         const p = db._data.produtos[idx];
+        const cat = db._data.categorias.find(c => c.id === p.categoria_id);
+        
+        if (cat && cat.controle_estoque === 1) {
+          const catIdx = db._data.categorias.findIndex(c => c.id === cat.id);
+          const oldCatStock = cat.estoque_atual || 0;
+          let newCatStock = oldCatStock;
+          let qtyMov = quantidade;
+
+          if (tipo === 'entrada') {
+            newCatStock += quantidade;
+          } else if (tipo === 'saida') {
+            newCatStock -= quantidade;
+          } else if (tipo === 'ajuste') {
+            qtyMov = quantidade - oldCatStock;
+            newCatStock = quantidade;
+          }
+
+          db._data.categorias[catIdx].estoque_atual = newCatStock;
+          
+          db._data.estoque_movimentacoes.push({
+            id: db._data.estoque_movimentacoes.length + 1,
+            produto_id: produtoId,
+            categoria_id: cat.id,
+            quantidade: qtyMov,
+            tipo,
+            motivo: motivo || 'Ajuste de estoque de categoria',
+            usuario_id: usuarioId,
+            data_movimentacao: new Date().toISOString()
+          });
+          db._save();
+          return { success: true, novoEstoque: newCatStock };
+        }
+
         const newStock = tipo === 'entrada' ? p.estoque_atual + quantidade : tipo === 'saida' ? p.estoque_atual - quantidade : quantidade;
         db._data.produtos[idx].estoque_atual = newStock;
         
@@ -501,10 +709,32 @@ const dbService = {
       return { success: false };
     }
 
-    const p = db.prepare('SELECT estoque_atual FROM produtos WHERE id = ?').get(produtoId);
-    if (!p) return { success: false };
+    const prod = db.prepare('SELECT p.*, c.controle_estoque as cat_controle, c.estoque_atual as cat_estoque FROM produtos p LEFT JOIN categorias c ON p.categoria_id = c.id WHERE p.id = ?').get(produtoId);
+    if (!prod) return { success: false };
 
-    let novoEstoque = p.estoque_atual;
+    if (prod.cat_controle === 1) {
+      const catId = prod.categoria_id;
+      const oldCatStock = prod.cat_estoque || 0;
+      let newCatStock = oldCatStock;
+      let qtyMov = quantidade;
+
+      if (tipo === 'entrada') {
+        newCatStock += quantidade;
+      } else if (tipo === 'saida') {
+        newCatStock -= quantidade;
+      } else if (tipo === 'ajuste') {
+        qtyMov = quantidade - oldCatStock;
+        newCatStock = quantidade;
+      }
+
+      db.prepare('UPDATE categorias SET estoque_atual = ? WHERE id = ?').run(newCatStock, catId);
+      db.prepare('INSERT INTO estoque_movimentacoes (produto_id, categoria_id, quantidade, tipo, motivo, usuario_id) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(produtoId, catId, qtyMov, tipo, motivo, usuarioId);
+
+      return { success: true, novoEstoque: newCatStock };
+    }
+
+    let novoEstoque = prod.estoque_atual;
     let qtyMov = quantidade;
 
     if (tipo === 'entrada') {
@@ -512,7 +742,7 @@ const dbService = {
     } else if (tipo === 'saida') {
       novoEstoque -= quantidade;
     } else if (tipo === 'ajuste') {
-      qtyMov = quantidade - p.estoque_atual;
+      qtyMov = quantidade - prod.estoque_atual;
       novoEstoque = quantidade;
     }
 
@@ -526,27 +756,43 @@ const dbService = {
   getMovimentacoesEstoque: () => {
     if (db.isJson) {
       return db._data.estoque_movimentacoes.map(m => {
-        const prod = db._data.produtos.find(p => p.id === m.produto_id);
+        const prod = m.produto_id ? db._data.produtos.find(p => p.id === m.produto_id) : null;
+        const cat = m.categoria_id ? db._data.categorias.find(c => c.id === m.categoria_id) : null;
         const user = db._data.usuarios.find(u => u.id === m.usuario_id);
+        
+        let label = 'Produto Excluído';
+        if (prod) {
+          label = prod.nome;
+        } else if (cat) {
+          label = `LOTE/BRUTO: ${cat.nome}`;
+        }
+        
         return {
           ...m,
-          produto_nome: prod ? prod.nome : 'Produto Excluído',
+          produto_nome: label,
           codigo_barras: prod ? prod.codigo_barras : '',
           usuario_nome: user ? user.name : 'Sistema'
         };
       }).reverse();
     }
     return db.prepare(`
-      SELECT m.*, p.nome as produto_nome, p.codigo_barras, u.name as usuario_nome
+      SELECT m.*, p.nome as produto_nome, p.codigo_barras, c.nome as categoria_nome, u.name as usuario_nome
       FROM estoque_movimentacoes m
       LEFT JOIN produtos p ON m.produto_id = p.id
+      LEFT JOIN categorias c ON m.categoria_id = c.id
       LEFT JOIN usuarios u ON m.usuario_id = u.id
       ORDER BY m.id DESC
       LIMIT 150
-    `).all();
+    `).all().map(m => {
+      let label = m.produto_nome || 'Produto Excluído';
+      if (!m.produto_id && m.categoria_nome) {
+        label = `LOTE/BRUTO: ${m.categoria_nome}`;
+      }
+      m.produto_nome = label;
+      return m;
+    });
   },
 
-  // Sales
   criarVenda: (venda, itens, usuarioId) => {
     if (db.isJson) {
       const vendaId = db._data.vendas.length ? Math.max(...db._data.vendas.map(v => v.id)) + 1 : 1;
@@ -578,19 +824,35 @@ const dbService = {
         // Deduct stock
         const pIdx = db._data.produtos.findIndex(p => p.id === item.produto_id);
         if (pIdx !== -1) {
-          db._data.produtos[pIdx].estoque_atual -= item.quantidade;
+          const p = db._data.produtos[pIdx];
+          const cat = db._data.categorias.find(c => c.id === p.categoria_id);
+          if (cat && cat.controle_estoque === 1) {
+            const catIdx = db._data.categorias.findIndex(c => c.id === cat.id);
+            db._data.categorias[catIdx].estoque_atual -= item.quantidade;
+            
+            db._data.estoque_movimentacoes.push({
+              id: db._data.estoque_movimentacoes.length + 1,
+              produto_id: item.produto_id,
+              categoria_id: cat.id,
+              quantidade: -item.quantidade,
+              tipo: 'saida',
+              motivo: `Venda #${vendaId}`,
+              usuario_id: usuarioId,
+              data_movimentacao: dataVenda
+            });
+          } else {
+            p.estoque_atual -= item.quantidade;
+            db._data.estoque_movimentacoes.push({
+              id: db._data.estoque_movimentacoes.length + 1,
+              produto_id: item.produto_id,
+              quantidade: -item.quantidade,
+              tipo: 'saida',
+              motivo: `Venda #${vendaId}`,
+              usuario_id: usuarioId,
+              data_movimentacao: dataVenda
+            });
+          }
         }
-
-        // Log movement
-        db._data.estoque_movimentacoes.push({
-          id: db._data.estoque_movimentacoes.length + 1,
-          produto_id: item.produto_id,
-          quantidade: -item.quantidade,
-          tipo: 'saida',
-          motivo: `Venda #${vendaId}`,
-          usuario_id: usuarioId,
-          data_movimentacao: dataVenda
-        });
       });
 
       db._save();
@@ -605,13 +867,13 @@ const dbService = {
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `);
       const result = stmtVenda.run(
-        usuarioId,
-        venda.total,
-        venda.desconto,
-        venda.subtotal,
-        venda.forma_pagamento,
-        venda.troco || 0,
-        venda.pago || 0
+          usuarioId,
+          venda.total,
+          venda.desconto,
+          venda.subtotal,
+          venda.forma_pagamento,
+          venda.troco || 0,
+          venda.pago || 0
       );
       const vendaId = result.lastInsertRowid;
 
@@ -620,19 +882,37 @@ const dbService = {
         VALUES (?, ?, ?, ?, ?)
       `);
       
+      const stmtCheckCat = db.prepare(`
+        SELECT p.categoria_id, c.controle_estoque 
+        FROM produtos p 
+        LEFT JOIN categorias c ON p.categoria_id = c.id 
+        WHERE p.id = ?
+      `);
+
       const stmtUpdateEstoque = db.prepare(`
         UPDATE produtos SET estoque_atual = estoque_atual - ? WHERE id = ?
       `);
 
+      const stmtUpdateCatEstoque = db.prepare(`
+        UPDATE categorias SET estoque_atual = estoque_atual - ? WHERE id = ?
+      `);
+
       const stmtMov = db.prepare(`
-        INSERT INTO estoque_movimentacoes (produto_id, quantidade, tipo, motivo, usuario_id)
-        VALUES (?, ?, 'saida', ?, ?)
+        INSERT INTO estoque_movimentacoes (produto_id, categoria_id, quantidade, tipo, motivo, usuario_id)
+        VALUES (?, ?, ?, 'saida', ?, ?)
       `);
 
       for (const item of itens) {
         stmtItem.run(vendaId, item.produto_id, item.quantidade, item.preco_unitario, item.quantidade * item.preco_unitario);
-        stmtUpdateEstoque.run(item.quantidade, item.produto_id);
-        stmtMov.run(item.produto_id, -item.quantidade, `Venda #${vendaId}`, usuarioId);
+        
+        const info = stmtCheckCat.get(item.produto_id);
+        if (info && info.controle_estoque === 1) {
+          stmtUpdateCatEstoque.run(item.quantidade, info.categoria_id);
+          stmtMov.run(item.produto_id, info.categoria_id, -item.quantidade, `Venda #${vendaId}`, usuarioId);
+        } else {
+          stmtUpdateEstoque.run(item.quantidade, item.produto_id);
+          stmtMov.run(item.produto_id, null, -item.quantidade, `Venda #${vendaId}`, usuarioId);
+        }
       }
 
       return vendaId;

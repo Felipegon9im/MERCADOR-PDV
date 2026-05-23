@@ -13,7 +13,9 @@ contextBridge.exposeInMainWorld('api', {
   // Categories & Products & Stock
   db: {
     getCategorias: () => ipcRenderer.invoke('db:getCategorias'),
-    salvarCategoria: (nome) => ipcRenderer.invoke('db:salvarCategoria', nome),
+    salvarCategoria: (catData) => ipcRenderer.invoke('db:salvarCategoria', catData),
+    ajustarEstoqueCategoria: (categoriaId, quantidade, tipo, motivo, usuarioId) => 
+      ipcRenderer.invoke('db:ajustarEstoqueCategoria', categoriaId, quantidade, tipo, motivo, usuarioId),
     getProdutos: () => ipcRenderer.invoke('db:getProdutos'),
     buscarProdutoPorCodigo: (codigo) => ipcRenderer.invoke('db:buscarProdutoPorCodigo', codigo),
     salvarProduto: (product, usuarioId) => ipcRenderer.invoke('db:salvarProduto', product, usuarioId),

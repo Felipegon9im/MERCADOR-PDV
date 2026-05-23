@@ -60,8 +60,12 @@ app.whenReady().then(() => {
     return dbService.getCategorias();
   });
   
-  ipcMain.handle('db:salvarCategoria', async (event, nome) => {
-    return dbService.salvarCategoria(nome);
+  ipcMain.handle('db:salvarCategoria', async (event, catData) => {
+    return dbService.salvarCategoria(catData);
+  });
+  
+  ipcMain.handle('db:ajustarEstoqueCategoria', async (event, categoriaId, quantidade, tipo, motivo, usuarioId) => {
+    return dbService.ajustarEstoqueCategoria(categoriaId, quantidade, tipo, motivo, usuarioId);
   });
   
   ipcMain.handle('db:getProdutos', async () => {

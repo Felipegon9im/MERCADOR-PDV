@@ -27,6 +27,17 @@ export default function Estoque() {
   const [showProductModal, setShowProductModal] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showManageCategoriesModal, setShowManageCategoriesModal] = useState(false);
+  const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState({
+    id: null,
+    nome: '',
+    controle_estoque: 0,
+    estoque_atual: 0,
+    preco_custo: 0
+  });
+  const [selectedCategoryYield, setSelectedCategoryYield] = useState(null);
+  const [movements, setMovements] = useState([]);
 
   // Form states
   const [currentProduct, setCurrentProduct] = useState({
@@ -44,6 +55,7 @@ export default function Estoque() {
 
   const [stockAdjustment, setStockAdjustment] = useState({
     produtoId: null,
+    categoriaId: null,
     produtoNome: '',
     quantidade: '',
     tipo: 'entrada', // entrada, saida, ajuste
@@ -62,6 +74,9 @@ export default function Estoque() {
 
       const cats = await api.db.getCategorias();
       setCategories(cats);
+
+      const movs = await api.db.getMovimentacoesEstoque();
+      setMovements(movs);
     } catch (e) {
       console.error(e);
     }
@@ -104,7 +119,12 @@ export default function Estoque() {
     if (!newCategoryName.trim()) return;
 
     try {
-      await api.db.salvarCategoria(newCategoryName.trim());
+      await api.db.salvarCategoria({
+        nome: newCategoryName.trim(),
+        controle_estoque: 0,
+        estoque_atual: 0,
+        preco_custo: 0
+      });
       setNewCategoryName('');
       setShowCategoryModal(false);
       loadData();
@@ -113,19 +133,72 @@ export default function Estoque() {
     }
   };
 
+  const handleSaveEditCategory = async (e) => {
+    e.preventDefault();
+    if (!editingCategory.nome.trim()) return;
+
+    try {
+      await api.db.salvarCategoria({
+        id: editingCategory.id,
+        nome: editingCategory.nome.trim(),
+        controle_estoque: editingCategory.controle_estoque,
+        estoque_atual: parseFloat(editingCategory.estoque_atual) || 0,
+        preco_custo: parseFloat(editingCategory.preco_custo) || 0
+      });
+      setShowEditCategoryModal(false);
+      loadData();
+    } catch (err) {
+      alert("Erro ao editar categoria: " + err.message);
+    }
+  };
+
+  const openCategoryStockModal = (cat) => {
+    setStockAdjustment({
+      produtoId: null,
+      categoriaId: cat.id,
+      produtoNome: `LOTE/BRUTO: ${cat.nome}`,
+      quantidade: '',
+      tipo: 'entrada',
+      motivo: ''
+    });
+    setShowStockModal(true);
+  };
+
+  const openEditCategoryModal = (cat) => {
+    setEditingCategory({
+      id: cat.id,
+      nome: cat.nome,
+      controle_estoque: cat.controle_estoque || 0,
+      estoque_atual: cat.estoque_atual || 0,
+      preco_custo: cat.preco_custo || 0
+    });
+    setShowEditCategoryModal(true);
+  };
+
   const handleSaveStockAdjustment = async (e) => {
     e.preventDefault();
     const qty = parseFloat(stockAdjustment.quantidade);
-    if (isNaN(qty) || !stockAdjustment.produtoId) return;
+    if (isNaN(qty)) return;
 
     try {
-      await api.db.ajustarEstoque(
-        stockAdjustment.produtoId,
-        qty,
-        stockAdjustment.tipo,
-        stockAdjustment.motivo || 'Ajuste manual administrativo',
-        1
-      );
+      if (stockAdjustment.categoriaId) {
+        await api.db.ajustarEstoqueCategoria(
+          stockAdjustment.categoriaId,
+          qty,
+          stockAdjustment.tipo,
+          stockAdjustment.motivo || 'Ajuste manual de categoria',
+          1
+        );
+      } else {
+        if (!stockAdjustment.produtoId) return;
+        await api.db.ajustarEstoque(
+          stockAdjustment.produtoId,
+          qty,
+          stockAdjustment.tipo,
+          stockAdjustment.motivo || 'Ajuste manual administrativo',
+          1
+        );
+      }
       setShowStockModal(false);
       loadData();
     } catch (err) {
@@ -205,15 +278,96 @@ export default function Estoque() {
     return matchesSearch && matchesCategory;
   });
 
-  // Calculate global stock metrics
+  // Calculate global stock metrics without double counting shared category stock
   const totalProdutos = filteredProducts.length;
-  const totalEstoqueUN = filteredProducts.filter(p => (p.tipo_produto || 'UNIDADE') === 'UNIDADE').reduce((sum, p) => sum + (p.estoque_atual || 0), 0);
-  const totalEstoqueKG = filteredProducts.filter(p => p.tipo_produto === 'KG').reduce((sum, p) => sum + (p.estoque_atual || 0), 0);
+  
+  const totalEstoqueUN = filteredProducts
+    .filter(p => (p.tipo_produto || 'UNIDADE') === 'UNIDADE')
+    .reduce((sum, p) => sum + (p.estoque_atual || 0), 0);
+    
+  const standardKgProducts = filteredProducts.filter(p => p.tipo_produto === 'KG' && p.controle_estoque_categoria !== 1);
+  const standardKgStock = standardKgProducts.reduce((sum, p) => sum + (p.estoque_atual || 0), 0);
+  
+  const sharedCategoryIds = [...new Set(filteredProducts.filter(p => p.controle_estoque_categoria === 1).map(p => p.categoria_id))];
+  const sharedKgStock = sharedCategoryIds.reduce((sum, catId) => {
+    const cat = categories.find(c => c.id === catId);
+    return sum + (cat ? (cat.estoque_atual || 0) : 0);
+  }, 0);
+  
+  const totalEstoqueKG = standardKgStock + sharedKgStock;
 
-  const custoTotal = filteredProducts.reduce((sum, p) => sum + ((p.estoque_atual || 0) * (p.preco_custo || 0)), 0);
-  const vendaTotal = filteredProducts.reduce((sum, p) => sum + ((p.estoque_atual || 0) * (p.preco_venda || 0)), 0);
+  const standardCusto = filteredProducts
+    .filter(p => p.controle_estoque_categoria !== 1)
+    .reduce((sum, p) => sum + ((p.estoque_atual || 0) * (p.preco_custo || 0)), 0);
+    
+  const sharedCusto = sharedCategoryIds.reduce((sum, catId) => {
+    const cat = categories.find(c => c.id === catId);
+    return sum + (cat ? ((cat.estoque_atual || 0) * (cat.preco_custo || 0)) : 0);
+  }, 0);
+  
+  const custoTotal = standardCusto + sharedCusto;
+
+  const standardVenda = filteredProducts
+    .filter(p => p.controle_estoque_categoria !== 1)
+    .reduce((sum, p) => sum + ((p.estoque_atual || 0) * (p.preco_venda || 0)), 0);
+    
+  const sharedVenda = sharedCategoryIds.reduce((sum, catId) => {
+    const cat = categories.find(c => c.id === catId);
+    if (!cat) return sum;
+    const catProds = filteredProducts.filter(p => p.categoria_id === catId);
+    if (catProds.length === 0) return sum;
+    const avgPrice = catProds.reduce((s, p) => s + (p.preco_venda || 0), 0) / catProds.length;
+    return sum + ((cat.estoque_atual || 0) * avgPrice);
+  }, 0);
+  
+  const vendaTotal = standardVenda + sharedVenda;
   const lucroTotal = vendaTotal - custoTotal;
   const margemMedia = custoTotal > 0 ? (lucroTotal / custoTotal) * 100 : 0;
+
+  // Calculate yield/rendimento for butcher categories
+  const calculateCategoryYield = (categoryId) => {
+    let totalEntradas = 0;
+    let totalVendido = 0;
+    let totalPerdas = 0;
+    let faturamento = 0;
+
+    movements.forEach(m => {
+      let isCat = false;
+      let prod = null;
+      if (m.categoria_id === categoryId) {
+        isCat = true;
+      } else if (m.produto_id) {
+        prod = products.find(p => p.id === m.produto_id);
+        if (prod && prod.categoria_id === categoryId) {
+          isCat = true;
+        }
+      }
+
+      if (isCat) {
+        if (m.tipo === 'entrada') {
+          totalEntradas += Math.abs(m.quantidade);
+        } else if (m.tipo === 'saida') {
+          const qty = Math.abs(m.quantidade);
+          if (m.motivo && m.motivo.startsWith('Venda')) {
+            totalVendido += qty;
+            const price = prod ? prod.preco_venda : (products.find(p => p.categoria_id === categoryId)?.preco_venda || 0);
+            faturamento += qty * price;
+          } else {
+            totalPerdas += qty;
+          }
+        }
+      }
+    });
+
+    const rendimento = totalEntradas > 0 ? (totalVendido / totalEntradas) * 100 : 0;
+    return {
+      totalEntradas,
+      totalVendido,
+      totalPerdas,
+      rendimento,
+      faturamento
+    };
+  };
 
   return (
     <div className="space-y-8 select-none">
@@ -230,6 +384,14 @@ export default function Estoque() {
 
         {/* Top actions */}
         <div className="flex space-x-3">
+          <button
+            onClick={() => setShowManageCategoriesModal(true)}
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-brand-border/60 hover:bg-brand-border text-gray-300 font-bold text-xs uppercase transition-colors border border-brand-border/80"
+          >
+            <Sliders size={14} className="text-purple-400" />
+            <span>Gerenciar Categorias</span>
+          </button>
+
           <button
             onClick={() => setShowCategoryModal(true)}
             className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-brand-border/60 hover:bg-brand-border text-gray-300 font-bold text-xs uppercase transition-colors border border-brand-border/80"
@@ -429,13 +591,19 @@ export default function Estoque() {
                     <td className="py-4 px-3 text-right text-brand-success">R$ {prod.preco_venda.toFixed(2)}</td>
                     <td className="py-4 px-3 text-right text-purple-400">{margin.toFixed(0)}%</td>
                     <td className="py-4 px-3 text-center">
-                      <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${
-                        isCritical 
-                          ? 'bg-brand-danger/10 border border-brand-danger/20 text-brand-danger' 
-                          : 'bg-brand-border/50 border border-brand-border text-gray-300'
-                      }`}>
-                        {prod.tipo_produto === 'KG' || prod.unidade === 'KG' ? prod.estoque_atual.toFixed(3) : prod.estoque_atual.toFixed(0)} {(prod.unidade || 'UN').toLowerCase()}
-                      </span>
+                      {prod.controle_estoque_categoria === 1 ? (
+                        <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-purple-500/15 border border-purple-500/30 text-purple-400" title="Estoque compartilhado com o peso bruto da categoria">
+                          {prod.estoque_atual.toFixed(3)} kg (Lote)
+                        </span>
+                      ) : (
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${
+                          isCritical 
+                            ? 'bg-brand-danger/10 border border-brand-danger/20 text-brand-danger' 
+                            : 'bg-brand-border/50 border border-brand-border text-gray-300'
+                        }`}>
+                          {prod.tipo_produto === 'KG' || prod.unidade === 'KG' ? prod.estoque_atual.toFixed(3) : prod.estoque_atual.toFixed(0)} {(prod.unidade || 'UN').toLowerCase()}
+                        </span>
+                      )}
                     </td>
                     <td className="py-4 px-3 text-center text-gray-500">{prod.tipo_produto === 'KG' || prod.unidade === 'KG' ? prod.estoque_minimo.toFixed(3) : prod.estoque_minimo.toFixed(0)} {(prod.unidade || 'UN').toLowerCase()}</td>
                     <td className="py-4 px-6">
@@ -920,6 +1088,262 @@ export default function Estoque() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL: GERENCIAR CATEGORIAS & RENDIMENTOS
+          ======================================================== */}
+      {showManageCategoriesModal && (
+        <div className="absolute inset-0 bg-brand-dark/80 backdrop-blur-sm flex items-center justify-center z-40 select-none">
+          <div className="w-full max-w-4xl bg-brand-card border border-brand-border rounded-3xl p-8 shadow-2xl animate-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                <Sliders size={18} className="text-brand-accent" />
+                <span>Administração e Rendimento de Categorias</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setShowManageCategoriesModal(false);
+                  setSelectedCategoryYield(null);
+                }}
+                className="p-1 text-gray-500 hover:text-white rounded-lg transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Rendimento Card Toggle Area */}
+            {selectedCategoryYield && (
+              <div className="p-5 bg-brand-dark/50 border border-brand-border rounded-2xl mb-6 animate-in fade-in duration-200">
+                <div className="flex justify-between items-center mb-4">
+                  <h4 className="text-xs font-bold text-purple-400 uppercase flex items-center space-x-2">
+                    <span>📊 Rendimento e Rendimento do Corte:</span>
+                    <span className="text-white font-black">{categories.find(c => c.id === selectedCategoryYield)?.nome}</span>
+                  </h4>
+                  <button 
+                    onClick={() => setSelectedCategoryYield(null)}
+                    className="text-[10px] text-gray-400 hover:text-white font-bold uppercase"
+                  >
+                    Fechar Relatório
+                  </button>
+                </div>
+                
+                {(() => {
+                  const yld = calculateCategoryYield(selectedCategoryYield);
+                  return (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                        <div className="p-3.5 bg-brand-dark/40 border border-brand-border rounded-xl">
+                          <span className="text-[9px] text-gray-500 font-bold block uppercase leading-none mb-1.5">Peso Recebido (Entrada Lote)</span>
+                          <span className="text-sm font-black text-white">{yld.totalEntradas.toFixed(3)} kg</span>
+                        </div>
+                        <div className="p-3.5 bg-brand-dark/40 border border-brand-border rounded-xl">
+                          <span className="text-[9px] text-gray-500 font-bold block uppercase leading-none mb-1.5">Peso Comercializado</span>
+                          <span className="text-sm font-black text-brand-success">{yld.totalVendido.toFixed(3)} kg</span>
+                        </div>
+                        <div className="p-3.5 bg-brand-dark/40 border border-brand-border rounded-xl">
+                          <span className="text-[9px] text-gray-500 font-bold block uppercase leading-none mb-1.5">Descartes (Ossos/Gordura/Quebra)</span>
+                          <span className="text-sm font-black text-brand-danger">{yld.totalPerdas.toFixed(3)} kg</span>
+                        </div>
+                        <div className="p-3.5 bg-purple-500/10 border border-purple-500/20 rounded-xl flex flex-col justify-center">
+                          <span className="text-[9px] text-purple-400 font-bold block uppercase leading-none mb-1.5">Aproveitamento Real</span>
+                          <span className="text-base font-black text-purple-300">{yld.rendimento.toFixed(1)}%</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 bg-brand-dark/60 border border-brand-border rounded-xl flex justify-between items-center">
+                        <div>
+                          <span className="text-[9px] text-gray-500 font-bold block uppercase leading-none mb-1">Previsão de Faturamento</span>
+                          <span className="text-xs text-gray-400 font-semibold">Baseado nas vendas dos subcortes vinculados</span>
+                        </div>
+                        <span className="text-lg font-black text-brand-success">
+                          R$ {yld.faturamento.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            <div className="overflow-y-auto flex-1 pr-1 border border-brand-border/40 bg-brand-dark/20 rounded-2xl">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead>
+                  <tr className="border-b border-brand-border/50 text-[10px] text-gray-500 font-bold uppercase tracking-wider bg-brand-card/50">
+                    <th className="py-3 px-4">Nome da Categoria</th>
+                    <th className="py-3 px-3">Modelo Estoque</th>
+                    <th className="py-3 px-3 text-right">Preço Custo Lote</th>
+                    <th className="py-3 px-3 text-center">Peso Bruto Atual</th>
+                    <th className="py-3 px-4 text-center w-60">Ações de Gerenciamento</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-brand-border/20">
+                  {categories.map(cat => {
+                    const isShared = cat.controle_estoque === 1;
+                    return (
+                      <tr key={cat.id} className="hover:bg-brand-border/5 font-semibold text-gray-300">
+                        <td className="py-3 px-4 text-white font-bold">{cat.nome}</td>
+                        <td className="py-3 px-3">
+                          {isShared ? (
+                            <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 text-[10px] font-bold">
+                              ⚖️ Peso Bruto (Açougue)
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-brand-border text-gray-400 text-[10px] font-bold">
+                              📦 Padrão (Unidades/Itens)
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          {isShared ? `R$ ${(cat.preco_custo || 0).toFixed(2)}/kg` : 'N/A'}
+                        </td>
+                        <td className="py-3 px-3 text-center text-white font-black">
+                          {isShared ? `${(cat.estoque_atual || 0).toFixed(3)} kg` : 'N/A'}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex justify-center items-center space-x-2">
+                            {/* Rendimento (Analytics) */}
+                            {isShared && (
+                              <button
+                                onClick={() => setSelectedCategoryYield(cat.id)}
+                                className="px-2.5 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg text-[10px] font-bold transition-colors flex items-center space-x-1"
+                              >
+                                <span>📊 Rendimento</span>
+                              </button>
+                            )}
+
+                            {/* Entrada/Descarte */}
+                            {isShared && (
+                              <button
+                                onClick={() => openCategoryStockModal(cat)}
+                                className="px-2.5 py-1.5 bg-brand-success/10 hover:bg-brand-success/20 text-brand-success rounded-lg text-[10px] font-bold transition-colors flex items-center space-x-1"
+                              >
+                                <span>⚖️ Movimentar</span>
+                              </button>
+                            )}
+
+                            {/* Editar */}
+                            <button
+                              onClick={() => openEditCategoryModal(cat)}
+                              className="px-2.5 py-1.5 bg-brand-accent/10 hover:bg-brand-accent/20 text-brand-accent rounded-lg text-[10px] font-bold transition-colors"
+                            >
+                              Editar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end pt-5 mt-4 border-t border-brand-border/40">
+              <button
+                onClick={() => {
+                  setShowManageCategoriesModal(false);
+                  setSelectedCategoryYield(null);
+                }}
+                className="px-6 py-2.5 bg-brand-border hover:bg-brand-border/80 text-gray-300 font-bold rounded-xl text-xs transition-colors"
+              >
+                Fechar Painel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL: EDITAR DETALHES DE CATEGORIA (PESO BRUTO)
+          ======================================================== */}
+      {showEditCategoryModal && (
+        <div className="absolute inset-0 bg-brand-dark/80 backdrop-blur-sm flex items-center justify-center z-50 select-none">
+          <div className="w-full max-w-md bg-brand-card border border-brand-border rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                <Edit3 size={18} className="text-brand-accent" />
+                <span>Configurar Categoria</span>
+              </h3>
+              <button
+                onClick={() => setShowEditCategoryModal(false)}
+                className="p-1 text-gray-500 hover:text-white rounded-lg transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditCategory} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-400 uppercase">Nome da Categoria</label>
+                <input
+                  required
+                  type="text"
+                  placeholder="Ex: Açougue Bovino"
+                  value={editingCategory.nome}
+                  onChange={(e) => setEditingCategory({...editingCategory, nome: e.target.value})}
+                  className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none"
+                />
+              </div>
+
+              {/* Toggle Controle Estoque */}
+              <div className="p-3 bg-brand-dark/30 border border-brand-border/40 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-white block">Estoque por Peso Bruto</span>
+                  <span className="text-[10px] text-gray-500 font-semibold block leading-tight mt-0.5">Ativa o Modo Açougue com estoque centralizado</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={editingCategory.controle_estoque === 1}
+                  onChange={(e) => setEditingCategory({...editingCategory, controle_estoque: e.target.checked ? 1 : 0})}
+                  className="h-4 w-4 text-brand-accent focus:ring-0 rounded border-brand-border bg-brand-dark"
+                />
+              </div>
+
+              {editingCategory.controle_estoque === 1 && (
+                <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-3 duration-200">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase block">Peso Bruto Atual (KG)</label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      placeholder="0.000"
+                      value={editingCategory.estoque_atual}
+                      onChange={(e) => setEditingCategory({...editingCategory, estoque_atual: e.target.value})}
+                      className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase block">Preço de Custo (R$/KG)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={editingCategory.preco_custo}
+                      onChange={(e) => setEditingCategory({...editingCategory, preco_custo: e.target.value})}
+                      className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex space-x-3 pt-4 border-t border-brand-border/40">
+                <button
+                  type="button"
+                  onClick={() => setShowEditCategoryModal(false)}
+                  className="flex-1 bg-brand-border hover:bg-brand-border/80 text-gray-300 font-bold py-3 rounded-xl text-xs transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-brand-accent hover:bg-brand-accentHover text-white font-bold py-3 rounded-xl text-xs transition-colors shadow-lg shadow-indigo-500/20"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
