@@ -32,27 +32,42 @@
     {
       "id": 1,
       "nome": "Mercearia",
-      "created_at": "2026-05-20T08:27:48.456Z"
+      "created_at": "2026-05-20T08:27:48.456Z",
+      "controle_estoque": 0,
+      "estoque_atual": 0,
+      "preco_custo": 0
     },
     {
       "id": 2,
       "nome": "Bebidas",
-      "created_at": "2026-05-20T08:27:48.456Z"
+      "created_at": "2026-05-20T08:27:48.456Z",
+      "controle_estoque": 0,
+      "estoque_atual": 0,
+      "preco_custo": 0
     },
     {
       "id": 3,
       "nome": "Frios e Laticínios",
-      "created_at": "2026-05-20T08:27:48.456Z"
+      "created_at": "2026-05-20T08:27:48.456Z",
+      "controle_estoque": 0,
+      "estoque_atual": 0,
+      "preco_custo": 0
     },
     {
       "id": 4,
       "nome": "Higiene e Limpeza",
-      "created_at": "2026-05-20T08:27:48.456Z"
+      "created_at": "2026-05-20T08:27:48.456Z",
+      "controle_estoque": 0,
+      "estoque_atual": 0,
+      "preco_custo": 0
     },
     {
       "id": 5,
       "nome": "Hortifruti",
-      "created_at": "2026-05-20T08:27:48.456Z"
+      "created_at": "2026-05-20T08:27:48.456Z",
+      "controle_estoque": 0,
+      "estoque_atual": 0,
+      "preco_custo": 0
     }
   ],
   "produtos": [
@@ -65,7 +80,9 @@
       "preco_venda": 4.5,
       "estoque_atual": 47,
       "estoque_minimo": 10,
-      "created_at": "2026-05-20T08:27:48.456Z"
+      "created_at": "2026-05-20T08:27:48.456Z",
+      "unidade": "UN",
+      "tipo_produto": "UNIDADE"
     },
     {
       "id": 2,
@@ -76,7 +93,9 @@
       "preco_venda": 8.9,
       "estoque_atual": 19,
       "estoque_minimo": 6,
-      "created_at": "2026-05-20T08:27:48.456Z"
+      "created_at": "2026-05-20T08:27:48.456Z",
+      "unidade": "UN",
+      "tipo_produto": "UNIDADE"
     },
     {
       "id": 3,
@@ -87,7 +106,9 @@
       "preco_venda": 29.9,
       "estoque_atual": 15,
       "estoque_minimo": 5,
-      "created_at": "2026-05-20T08:27:48.456Z"
+      "created_at": "2026-05-20T08:27:48.456Z",
+      "unidade": "UN",
+      "tipo_produto": "UNIDADE"
     },
     {
       "id": 4,
@@ -98,7 +119,9 @@
       "preco_venda": 8.5,
       "estoque_atual": 20,
       "estoque_minimo": 5,
-      "created_at": "2026-05-20T08:27:48.456Z"
+      "created_at": "2026-05-20T08:27:48.456Z",
+      "unidade": "UN",
+      "tipo_produto": "UNIDADE"
     },
     {
       "id": 5,
@@ -109,7 +132,9 @@
       "preco_venda": 5.49,
       "estoque_atual": 30,
       "estoque_minimo": 8,
-      "created_at": "2026-05-20T08:27:48.456Z"
+      "created_at": "2026-05-20T08:27:48.456Z",
+      "unidade": "UN",
+      "tipo_produto": "UNIDADE"
     }
   ],
   "vendas": [
@@ -162,7 +187,8 @@
       "tipo": "saida",
       "motivo": "Venda #1",
       "usuario_id": 3,
-      "data_movimentacao": "2026-05-20T08:34:47.961Z"
+      "data_movimentacao": "2026-05-20T08:34:47.961Z",
+      "categoria_id": null
     },
     {
       "id": 2,
@@ -171,7 +197,8 @@
       "tipo": "saida",
       "motivo": "Venda #2",
       "usuario_id": 3,
-      "data_movimentacao": "2026-05-20T08:47:55.572Z"
+      "data_movimentacao": "2026-05-20T08:47:55.572Z",
+      "categoria_id": null
     }
   ],
   "fornecedores": [],
@@ -234,5 +261,7 @@
       "detalhes": "Venda #2 finalizada. Total: R$ 44.50",
       "data_acao": "2026-05-20T08:47:55.572Z"
     }
-  ]
+  ],
+  "clientes": [],
+  "cliente_pagamentos": []
 }

@@ -175,33 +175,37 @@ if (typeof db.exec === 'function') {
     const tableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='vendas'").get()?.sql || "";
     if (tableSql && !tableSql.includes("'fiado'")) {
       console.log("Migrating 'vendas' table to support 'fiado' payment method...");
-      db.exec(`
-        BEGIN TRANSACTION;
-        ALTER TABLE vendas RENAME TO vendas_old;
-        CREATE TABLE vendas (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          usuario_id INTEGER,
-          total REAL NOT NULL,
-          desconto REAL DEFAULT 0,
-          subtotal REAL NOT NULL,
-          forma_pagamento TEXT CHECK(forma_pagamento IN ('dinheiro', 'pix', 'debito', 'credito', 'fiado')) NOT NULL,
-          troco REAL DEFAULT 0,
-          pago REAL DEFAULT 0,
-          data_venda TEXT DEFAULT CURRENT_TIMESTAMP,
-          cliente_id INTEGER,
-          FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
-          FOREIGN KEY (cliente_id) REFERENCES clientes(id)
-        );
-        INSERT INTO vendas (id, usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, data_venda, cliente_id)
-        SELECT id, usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, data_venda, NULL FROM vendas_old;
-        DROP TABLE vendas_old;
-        COMMIT;
-      `);
+      
+      const migrateVendas = db.transaction(() => {
+        db.exec("ALTER TABLE vendas RENAME TO vendas_old;");
+        db.exec(`
+          CREATE TABLE vendas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario_id INTEGER,
+            total REAL NOT NULL,
+            desconto REAL DEFAULT 0,
+            subtotal REAL NOT NULL,
+            forma_pagamento TEXT CHECK(forma_pagamento IN ('dinheiro', 'pix', 'debito', 'credito', 'fiado')) NOT NULL,
+            troco REAL DEFAULT 0,
+            pago REAL DEFAULT 0,
+            data_venda TEXT DEFAULT CURRENT_TIMESTAMP,
+            cliente_id INTEGER,
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+          );
+        `);
+        db.exec(`
+          INSERT INTO vendas (id, usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, data_venda, cliente_id)
+          SELECT id, usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, data_venda, NULL FROM vendas_old;
+        `);
+        db.exec("DROP TABLE vendas_old;");
+      });
+
+      migrateVendas();
       console.log("Vendas table successfully migrated.");
     }
   } catch (err) {
     console.error("Failed to migrate 'vendas' table:", err);
-    try { db.exec("ROLLBACK;"); } catch(e) {}
   }
 
   // Create clientes and cliente_pagamentos tables if they don't exist
