@@ -95,6 +95,41 @@ const api = {
     }
   },
   
+  caixa: {
+    getSessaoAtiva: async (usuarioId) => {
+      if (window.api) return window.api.caixa.getSessaoAtiva(usuarioId);
+      return null;
+    },
+    abrirCaixa: async (usuarioId, valorAbertura) => {
+      if (window.api) return window.api.caixa.abrirCaixa(usuarioId, valorAbertura);
+      return { success: true };
+    },
+    lancarMovimentacaoCaixa: async (sessaoId, tipo, valor, motivo, usuarioId) => {
+      if (window.api) return window.api.caixa.lancarMovimentacaoCaixa(sessaoId, tipo, valor, motivo, usuarioId);
+      return { success: true };
+    },
+    getMovimentacoesSessao: async (sessaoId) => {
+      if (window.api) return window.api.caixa.getMovimentacoesSessao(sessaoId);
+      return [];
+    },
+    getValoresEsperadosCaixa: async (sessaoId) => {
+      if (window.api) return window.api.caixa.getValoresEsperadosCaixa(sessaoId);
+      return { total_esperado: 0 };
+    },
+    fecharCaixa: async (sessaoId, valorFechamentoDinheiro, valorFechamentoCalculado, usuarioId) => {
+      if (window.api) return window.api.caixa.fecharCaixa(sessaoId, valorFechamentoDinheiro, valorFechamentoCalculado, usuarioId);
+      return { success: true };
+    },
+    getRelatorioFechamento: async (sessaoId) => {
+      if (window.api) return window.api.caixa.getRelatorioFechamento(sessaoId);
+      return null;
+    },
+    getHistoricoCaixas: async () => {
+      if (window.api) return window.api.caixa.getHistoricoCaixas();
+      return [];
+    }
+  },
+  
   sales: {
     criarVenda: async (venda, itens, usuarioId) => {
       if (window.api) return window.api.sales.criarVenda(venda, itens, usuarioId);
