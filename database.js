@@ -291,6 +291,8 @@ if (typeof db.exec === 'function') {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER NOT NULL,
         valor_abertura REAL NOT NULL,
+        valor_abertura_esperado REAL,
+        diferenca_abertura REAL,
         valor_fechamento_dinheiro REAL,
         valor_fechamento_calculado REAL,
         status TEXT CHECK(status IN ('aberto', 'fechado')) DEFAULT 'aberto',
@@ -320,6 +322,14 @@ if (typeof db.exec === 'function') {
   } catch (err) {
     // Column already exists, ignore
   }
+
+  // Auto-migration to add valor_abertura_esperado and diferenca_abertura to caixa_sessoes
+  try {
+    db.exec("ALTER TABLE caixa_sessoes ADD COLUMN valor_abertura_esperado REAL;");
+  } catch (err) {}
+  try {
+    db.exec("ALTER TABLE caixa_sessoes ADD COLUMN diferenca_abertura REAL;");
+  } catch (err) {}
 
   // Seed default data if empty
   const userCount = db.prepare('SELECT count(*) as count FROM usuarios').get().count;
@@ -1789,8 +1799,10 @@ const dbService = {
     }
   },
 
-  abrirCaixa: (usuarioId, valorAbertura) => {
+  abrirCaixa: (usuarioId, valorAbertura, valorAberturaEsperado) => {
     const valorNum = parseFloat(valorAbertura) || 0;
+    const valorEspNum = parseFloat(valorAberturaEsperado) || 0;
+    const diferenca = parseFloat((valorNum - valorEspNum).toFixed(2));
     if (db.isJson) {
       if (!db._data.caixa_sessoes) db._data.caixa_sessoes = [];
       const id = db._data.caixa_sessoes.length ? Math.max(...db._data.caixa_sessoes.map(s => s.id)) + 1 : 1;
@@ -1798,6 +1810,8 @@ const dbService = {
         id,
         usuario_id: usuarioId,
         valor_abertura: valorNum,
+        valor_abertura_esperado: valorEspNum,
+        diferenca_abertura: diferenca,
         valor_fechamento_dinheiro: null,
         valor_fechamento_calculado: null,
         status: 'aberto',
@@ -1806,13 +1820,13 @@ const dbService = {
       };
       db._data.caixa_sessoes.push(newSession);
       db._save();
-      dbService.logAcao(usuarioId, 'CAIXA_ABERTO', `Caixa aberto com fundo de troco R$ ${valorNum.toFixed(2)}`);
+      dbService.logAcao(usuarioId, 'CAIXA_ABERTO', `Caixa aberto. Fundo troco: R$ ${valorNum.toFixed(2)}, Esperado: R$ ${valorEspNum.toFixed(2)} (Dif: R$ ${diferenca.toFixed(2)})`);
       return { id };
     }
     try {
-      const stmt = db.prepare("INSERT INTO caixa_sessoes (usuario_id, valor_abertura, status) VALUES (?, ?, 'aberto')");
-      const result = stmt.run(usuarioId, valorNum);
-      dbService.logAcao(usuarioId, 'CAIXA_ABERTO', `Caixa aberto com fundo de troco R$ ${valorNum.toFixed(2)}`);
+      const stmt = db.prepare("INSERT INTO caixa_sessoes (usuario_id, valor_abertura, valor_abertura_esperado, diferenca_abertura, status) VALUES (?, ?, ?, ?, 'aberto')");
+      const result = stmt.run(usuarioId, valorNum, valorEspNum, diferenca);
+      dbService.logAcao(usuarioId, 'CAIXA_ABERTO', `Caixa aberto. Fundo troco: R$ ${valorNum.toFixed(2)}, Esperado: R$ ${valorEspNum.toFixed(2)} (Dif: R$ ${diferenca.toFixed(2)})`);
       return { id: result.lastInsertRowid };
     } catch (err) {
       console.error("Error in abrirCaixa:", err);

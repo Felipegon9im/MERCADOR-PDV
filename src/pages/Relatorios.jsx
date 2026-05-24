@@ -233,6 +233,12 @@ export default function Relatorios() {
             <span>Fundo de Troco Inicial:</span>
             <span>R$ ${sessao.valor_abertura.toFixed(2)}</span>
           </div>
+          ${sessao.diferenca_abertura && sessao.diferenca_abertura !== 0 ? `
+            <div class="row" style="font-size: 10px; color: ${sessao.diferenca_abertura > 0 ? 'green' : 'red'}; font-weight: bold;">
+              <span>&nbsp;&nbsp;Divergencia Abertura:</span>
+              <span>${sessao.diferenca_abertura > 0 ? '+' : ''} R$ ${sessao.diferenca_abertura.toFixed(2)}</span>
+            </div>
+          ` : ''}
           <div class="row">
             <span>Vendas Dinheiro:</span>
             <span>R$ ${vSums.dinheiro.toFixed(2)}</span>
@@ -557,10 +563,11 @@ export default function Relatorios() {
                   <th className="py-4 px-4">Operador</th>
                   <th className="py-4 px-4">Abertura</th>
                   <th className="py-4 px-4">Fechamento</th>
-                  <th className="py-4 px-4 text-right">Inicial (Troco)</th>
+                  <th className="py-4 px-4 text-right">Troco Inicial</th>
+                  <th className="py-4 px-4 text-right">Dif. Abertura</th>
                   <th className="py-4 px-4 text-right">Dinheiro Esperado</th>
-                  <th className="py-4 px-4 text-right">Declarado (Contado)</th>
-                  <th className="py-4 px-4 text-right">Diferença</th>
+                  <th className="py-4 px-4 text-right">Contado Gaveta</th>
+                  <th className="py-4 px-4 text-right">Dif. Fechamento</th>
                   <th className="py-4 px-6 text-center w-28">Opções</th>
                 </tr>
               </thead>
@@ -590,6 +597,15 @@ export default function Relatorios() {
                           )}
                         </td>
                         <td className="py-4 px-4 text-right text-white">R$ {c.valor_abertura.toFixed(2)}</td>
+                        <td className="py-4 px-4 text-right font-black">
+                          {c.diferenca_abertura === undefined || c.diferenca_abertura === null || c.diferenca_abertura === 0 ? (
+                            <span className="text-gray-500 font-normal">R$ 0,00</span>
+                          ) : c.diferenca_abertura > 0 ? (
+                            <span className="text-brand-success">+ R$ {c.diferenca_abertura.toFixed(2)}</span>
+                          ) : (
+                            <span className="text-brand-danger">- R$ {Math.abs(c.diferenca_abertura).toFixed(2)}</span>
+                          )}
+                        </td>
                         <td className="py-4 px-4 text-right text-gray-400">
                           {c.status === 'aberto' ? '---' : `R$ ${c.valor_fechamento_calculado.toFixed(2)}`}
                         </td>
@@ -755,6 +771,14 @@ export default function Relatorios() {
                     <span>Fundo de Troco Inicial:</span>
                     <span className="text-white">R$ {selectedSession.sessao.valor_abertura.toFixed(2)}</span>
                   </div>
+                  {selectedSession.sessao.diferenca_abertura !== undefined && selectedSession.sessao.diferenca_abertura !== null && selectedSession.sessao.diferenca_abertura !== 0 && (
+                    <div className="flex justify-between items-center py-0.5 text-xs">
+                      <span>Divergência na Abertura:</span>
+                      <span className={selectedSession.sessao.diferenca_abertura > 0 ? "text-brand-success font-black" : "text-brand-danger font-black"}>
+                        {selectedSession.sessao.diferenca_abertura > 0 ? '+' : ''} R$ {selectedSession.sessao.diferenca_abertura.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center py-0.5">
                     <span>Vendas em Dinheiro:</span>
                     <span className="text-white">R$ {selectedSession.vendas.dinheiro.toFixed(2)}</span>

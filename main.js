@@ -138,8 +138,8 @@ app.whenReady().then(() => {
     return dbService.getSessaoAtiva(usuarioId);
   });
 
-  ipcMain.handle('caixa:abrirCaixa', async (event, usuarioId, valorAbertura) => {
-    return dbService.abrirCaixa(usuarioId, valorAbertura);
+  ipcMain.handle('caixa:abrirCaixa', async (event, usuarioId, valorAbertura, valorAberturaEsperado) => {
+    return dbService.abrirCaixa(usuarioId, valorAbertura, valorAberturaEsperado);
   });
 
   ipcMain.handle('caixa:lancarMovimentacaoCaixa', async (event, sessaoId, tipo, valor, motivo, usuarioId) => {

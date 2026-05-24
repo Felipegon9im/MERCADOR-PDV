@@ -34,7 +34,7 @@ contextBridge.exposeInMainWorld('api', {
   // Cash register session management
   caixa: {
     getSessaoAtiva: (usuarioId) => ipcRenderer.invoke('caixa:getSessaoAtiva', usuarioId),
-    abrirCaixa: (usuarioId, valorAbertura) => ipcRenderer.invoke('caixa:abrirCaixa', usuarioId, valorAbertura),
+    abrirCaixa: (usuarioId, valorAbertura, valorAberturaEsperado) => ipcRenderer.invoke('caixa:abrirCaixa', usuarioId, valorAbertura, valorAberturaEsperado),
     lancarMovimentacaoCaixa: (sessaoId, tipo, valor, motivo, usuarioId) => 
       ipcRenderer.invoke('caixa:lancarMovimentacaoCaixa', sessaoId, tipo, valor, motivo, usuarioId),
     getMovimentacoesSessao: (sessaoId) => ipcRenderer.invoke('caixa:getMovimentacoesSessao', sessaoId),

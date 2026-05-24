@@ -269,8 +269,14 @@ export default function PDV() {
       showAlert("Por favor, insira um valor inicial de troco válido (R$ 0,00 ou maior).");
       return;
     }
+
+    // Previous closure value to confront
+    const expected = lastClosure && lastClosure.valor_fechamento_dinheiro !== null 
+      ? lastClosure.valor_fechamento_dinheiro 
+      : 0;
+
     try {
-      await api.caixa.abrirCaixa(user.id, float);
+      await api.caixa.abrirCaixa(user.id, float, expected);
       playBeep('chime');
       const active = await api.caixa.getSessaoAtiva(user.id);
       setActiveSession(active);
@@ -404,6 +410,12 @@ export default function PDV() {
               <span>Fundo de Troco Inicial:</span>
               <span>R$ ${closureRelatorio.sessao.valor_abertura.toFixed(2)}</span>
             </div>
+            ${closureRelatorio.sessao.diferenca_abertura && closureRelatorio.sessao.diferenca_abertura !== 0 ? `
+              <div class="row" style="font-size: 10px; color: ${closureRelatorio.sessao.diferenca_abertura > 0 ? 'green' : 'red'}; font-weight: bold;">
+                <span>&nbsp;&nbsp;Divergencia Abertura:</span>
+                <span>${closureRelatorio.sessao.diferenca_abertura > 0 ? '+' : ''} R$ ${closureRelatorio.sessao.diferenca_abertura.toFixed(2)}</span>
+              </div>
+            ` : ''}
             <div class="row">
               <span>Vendas Dinheiro:</span>
               <span>R$ ${closureRelatorio.vendas.dinheiro.toFixed(2)}</span>
@@ -1945,9 +1957,14 @@ export default function PDV() {
 
               {/* Stats Grid */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-brand-dark/40 border border-brand-border/60 rounded-2xl p-4">
+                <div className="bg-brand-dark/40 border border-brand-border/60 rounded-2xl p-4 relative overflow-hidden">
                   <span className="text-[9px] text-gray-500 font-bold uppercase block leading-none mb-1">Abertura / Fundo Troco</span>
                   <span className="text-base font-black text-white">R$ {closureRelatorio.sessao.valor_abertura.toFixed(2)}</span>
+                  {closureRelatorio.sessao.diferenca_abertura !== undefined && closureRelatorio.sessao.diferenca_abertura !== null && closureRelatorio.sessao.diferenca_abertura !== 0 && (
+                    <span className={`block text-[9px] font-extrabold uppercase mt-1 ${closureRelatorio.sessao.diferenca_abertura > 0 ? 'text-brand-success' : 'text-brand-danger'}`}>
+                      {closureRelatorio.sessao.diferenca_abertura > 0 ? 'Sobrou' : 'Faltou'} R$ {Math.abs(closureRelatorio.sessao.diferenca_abertura).toFixed(2)} na abertura
+                    </span>
+                  )}
                 </div>
                 <div className="bg-brand-dark/40 border border-brand-border/60 rounded-2xl p-4">
                   <span className="text-[9px] text-gray-500 font-bold uppercase block leading-none mb-1">Vendas Dinheiro</span>
