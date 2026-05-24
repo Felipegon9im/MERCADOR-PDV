@@ -1095,7 +1095,7 @@ const dbService = {
           return {
             ...iv,
             produto_nome: prod ? prod.nome : 'Produto Excluído',
-            codigo_barras: prod ? prod.codigo_barras : ''
+            codigo_barras: prod ? prod.codigo_barras : 'N/A'
           };
         });
       return {
@@ -1120,7 +1120,14 @@ const dbService = {
       WHERE iv.venda_id = ?
     `).all(vendaId);
 
-    return { venda, itens };
+    return {
+      venda,
+      itens: itens.map(item => ({
+        ...item,
+        produto_nome: item.produto_nome || 'Produto Excluído',
+        codigo_barras: item.codigo_barras || 'N/A'
+      }))
+    };
   },
 
   // Suppliers & XML Imports
@@ -1404,10 +1411,10 @@ const dbService = {
 
       // Calculate total cost and discounts to compute real profit
       const profitRow = db.prepare(`
-        SELECT SUM(iv.total_item - (iv.quantidade * p.preco_custo)) as raw_profit
+        SELECT SUM(iv.total_item - (iv.quantidade * COALESCE(p.preco_custo, 0))) as raw_profit
         FROM itens_venda iv
         JOIN vendas v ON iv.venda_id = v.id
-        JOIN produtos p ON iv.produto_id = p.id
+        LEFT JOIN produtos p ON iv.produto_id = p.id
         WHERE ${dateFilter.replace('data_venda', 'v.data_venda')}
       `).get();
 
@@ -1488,6 +1495,14 @@ const dbService = {
         db._data.produtos.splice(idx, 1);
         // Also clean up stock movements
         db._data.estoque_movimentacoes = db._data.estoque_movimentacoes.filter(m => m.produto_id !== id);
+        // Nullify item references in itens_venda
+        if (Array.isArray(db._data.itens_venda)) {
+          db._data.itens_venda.forEach(iv => {
+            if (iv.produto_id === id) {
+              iv.produto_id = null;
+            }
+          });
+        }
         db._save();
         dbService.logAcao(usuarioId, 'PRODUTO_EXCLUIDO', `Produto ${prod.nome} (ID: ${id}) excluído com sucesso`);
         return { success: true };
@@ -1500,6 +1515,8 @@ const dbService = {
       if (!prod) return { success: false, message: 'Produto não encontrado' };
 
       const transaction = db.transaction(() => {
+        // Nullify sold items references
+        db.prepare('UPDATE itens_venda SET produto_id = NULL WHERE produto_id = ?').run(id);
         // Delete stock movements
         db.prepare('DELETE FROM estoque_movimentacoes WHERE produto_id = ?').run(id);
         // Delete invoice items
