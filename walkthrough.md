@@ -55,12 +55,21 @@ Foi construída uma nova e avançada tela administrativa retaguarda com estilo *
 
 ## 🛠️ Correção e Resiliência (Hotfix de Banco de Dados)
 
-Durante a migração do banco de dados na versão **1.0.4**, identificamos um comportamento sutil do SQLite: ao renomear a tabela `vendas` para `vendas_old` com chaves estrangeiras ativas, a tabela filha `itens_venda` teve sua definição de chave estrangeira automaticamente atualizada pelo SQLite para referenciar `vendas_old`. Ao dropar a tabela `vendas_old`, a referência da chave estrangeira foi corrompida, resultando no erro `SqliteError: no such table: main.vendas_old` no momento de fechar vendas no caixa.
+Durante o desenvolvimento e migração do banco de dados na versão **1.0.4**, identificamos e corrigimos dois comportamentos sutis no banco de dados SQLite:
 
-### 🩹 Como foi resolvido:
-1. **Desativação Temporária de Chaves Estrangeiras:** O código de auto-migração em `database.js` foi corrigido para desativar temporariamente as restrições (`PRAGMA foreign_keys = OFF;`) durante a alteração das tabelas, impedindo que o SQLite reescreva as chaves estrangeiras.
-2. **Mecanismo de Autocura (Self-Healing):** Implementamos uma rotina resiliente de autocura que verifica se a tabela `itens_venda` está corrompida (referenciando `vendas_old`) e reconstrói a tabela dinamicamente com a chave estrangeira apontando corretamente para `vendas(id)`.
-3. **Cura de Bancos Existentes:** Rodamos scripts de correção em todos os bancos de dados ativos no sistema (`AppData\Local\Programs`, `AppData\Roaming`, e pasta de desenvolvimento), restabelecendo o perfeito funcionamento de forma automática e transparente para o cliente.
+### 1. 🔗 Correção de Chaves Estrangeiras nas Migrações de Vendas
+*   **Problema:** Ao renomear a tabela `vendas` para `vendas_old` com chaves estrangeiras ativas, a tabela filha `itens_venda` teve sua definição de chave estrangeira automaticamente atualizada pelo SQLite para referenciar `vendas_old`. Ao dropar a tabela `vendas_old`, a referência da chave estrangeira foi corrompida, resultando no erro `SqliteError: no such table: main.vendas_old`.
+*   **Solução:** 
+    1. **Desativação Temporária de Chaves Estrangeiras:** O código de auto-migração em `database.js` foi corrigido para desativar temporariamente as restrições (`PRAGMA foreign_keys = OFF;`) durante a alteração das tabelas, impedindo que o SQLite reescreva as chaves estrangeiras.
+    2. **Mecanismo de Autocura (Self-Healing):** Implementamos uma rotina resiliente de autocura que verifica se a tabela `itens_venda` está corrompida (referenciando `vendas_old`) e reconstrói a tabela dinamicamente com a chave estrangeira apontando corretamente para `vendas(id)`.
+    3. **Cura de Bancos Existentes:** Rodamos scripts de correção em todos os bancos de dados ativos no sistema (`AppData\Local\Programs`, `AppData\Roaming`, e pasta de desenvolvimento), restabelecendo o perfeito funcionamento de forma automática e transparente.
+
+### 2. ❌ Exclusão Segura de Produtos com Histórico de Vendas (Hotfix da foto)
+*   **Problema:** Ao tentar excluir um produto que já havia sido vendido anteriormente, o SQLite lançava a exceção `FOREIGN KEY constraint failed`. Isso acontecia porque a tabela de itens vendidos (`itens_venda`) possui uma chave estrangeira referenciando a tabela de produtos (`produtos`). Deletar o produto violaria a integridade referencial do banco.
+*   **Solução:**
+    1. **Nulidade Transacional:** Atualizamos a lógica em `excluirProduto` (`database.js`). Agora, antes de deletar o produto da tabela `produtos`, o sistema define dinamicamente `produto_id = NULL` em todas as linhas correspondentes da tabela `itens_venda` dentro de uma transação SQLite segura.
+    2. **Resiliência nos Relatórios e Históricos:** Ajustamos a API `getVendaDetalhes` para mapear os itens vendidos. Se um produto for excluído (`produto_id` nulo), o sistema renderiza automaticamente `'Produto Excluído'` no nome do produto e `'N/A'` no código de barras, impedindo falhas na tela de relatórios ou impressão de cupons.
+    3. **Resiliência no Dashboard:** Atualizamos a query de cálculo de lucro real em `getDashboardStats` para usar `LEFT JOIN` com `COALESCE(p.preco_custo, 0)`. Isso garante que as vendas históricas de produtos excluídos ainda sejam computadas perfeitamente no faturamento e lucro total exibidos.
 
 ---
 
