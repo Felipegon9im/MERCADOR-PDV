@@ -65,6 +65,19 @@ export default function PDV() {
 
   // Cash Register Session states
   const [activeSession, setActiveSession] = useState(null);
+  const [alertModal, setAlertModal] = useState(null); // { title, message, type: 'error'|'success', onConfirm }
+  const [confirmModal, setConfirmModal] = useState(null); // { message, onConfirm }
+
+  const showAlert = (message, type = 'error', title = 'Aviso', onConfirm = null) => {
+    playBeep(type === 'success' ? 'chime' : 'error');
+    setAlertModal({ title, message, type, onConfirm });
+  };
+
+  const showConfirm = (message, onConfirm) => {
+    playBeep('chime');
+    setConfirmModal({ message, onConfirm });
+  };
+
   const [showOpeningModal, setShowOpeningModal] = useState(false);
   const [openingFloat, setOpeningFloat] = useState('');
   
@@ -196,7 +209,7 @@ export default function PDV() {
     
     if (isNaN(finalWeight) || finalWeight <= 0) {
       playBeep('error');
-      alert("Por favor, informe um peso válido maior que zero.");
+      showAlert("Por favor, informe um peso válido maior que zero.");
       return;
     }
     
@@ -221,7 +234,6 @@ export default function PDV() {
     setScaleStatus('lendo');
     focusBarcode();
   };
-
   // Cash register session check on mount
   const checkSession = async () => {
     try {
@@ -244,7 +256,7 @@ export default function PDV() {
     const float = parseFloat(openingFloat);
     if (isNaN(float) || float < 0) {
       playBeep('error');
-      alert("Por favor, insira um valor inicial de troco válido (R$ 0,00 ou maior).");
+      showAlert("Por favor, insira um valor inicial de troco válido (R$ 0,00 ou maior).");
       return;
     }
     try {
@@ -257,7 +269,7 @@ export default function PDV() {
       focusBarcode();
     } catch (err) {
       console.error("Erro ao abrir caixa:", err);
-      alert("Erro ao realizar abertura de caixa: " + err.message);
+      showAlert("Erro ao realizar abertura de caixa: " + err.message);
     }
   };
 
@@ -266,12 +278,12 @@ export default function PDV() {
     const val = parseFloat(movAmount);
     if (isNaN(val) || val <= 0) {
       playBeep('error');
-      alert("Por favor, insira um valor de movimentação válido e maior que zero.");
+      showAlert("Por favor, insira um valor de movimentação válido e maior que zero.");
       return;
     }
     if (!movReason.trim()) {
       playBeep('error');
-      alert("Por favor, insira o motivo desta movimentação.");
+      showAlert("Por favor, insira o motivo desta movimentação.");
       return;
     }
     
@@ -280,7 +292,7 @@ export default function PDV() {
         const resExp = await api.caixa.getValoresEsperadosCaixa(activeSession.id);
         if (resExp && val > resExp.total_esperado) {
           playBeep('error');
-          alert(`Valor de sangria (R$ ${val.toFixed(2)}) é maior do que o valor total esperado em dinheiro no caixa (R$ ${resExp.total_esperado.toFixed(2)})!`);
+          showAlert(`Valor de sangria (R$ ${val.toFixed(2)}) é maior do que o valor total esperado em dinheiro no caixa (R$ ${resExp.total_esperado.toFixed(2)})!`);
           return;
         }
       } catch (err) {
@@ -297,7 +309,7 @@ export default function PDV() {
       focusBarcode();
     } catch (err) {
       console.error("Erro ao lançar movimentação:", err);
-      alert("Erro ao registrar movimentação de caixa: " + err.message);
+      showAlert("Erro ao registrar movimentação de caixa: " + err.message);
     }
   };
 
@@ -313,7 +325,7 @@ export default function PDV() {
       playBeep('success');
     } catch (err) {
       console.error("Erro ao carregar dados de fechamento:", err);
-      alert("Erro ao carregar dados para o fechamento: " + err.message);
+      showAlert("Erro ao carregar dados para o fechamento: " + err.message);
     }
   };
 
@@ -321,7 +333,7 @@ export default function PDV() {
     const counted = parseFloat(closureCounted);
     if (isNaN(counted) || counted < 0) {
       playBeep('error');
-      alert("Por favor, insira o valor físico contado na gaveta.");
+      showAlert("Por favor, insira o valor físico contado na gaveta.");
       return;
     }
     
@@ -440,13 +452,14 @@ export default function PDV() {
       
       await api.print.imprimirCupom(closureHtml);
       
-      alert("Caixa fechado com sucesso! O comprovante foi enviado para a impressora. O sistema retornará para a tela de login.");
-      const { logout } = useAuthStore.getState();
-      await logout();
-      window.location.reload();
+      showAlert("Caixa fechado com sucesso!\n\nO comprovante foi enviado para a impressora.\nO sistema retornará para a tela de login.", "success", "Sucesso", async () => {
+        const { logout } = useAuthStore.getState();
+        await logout();
+        window.location.reload();
+      });
     } catch (err) {
       console.error("Erro ao fechar caixa:", err);
-      alert("Erro ao finalizar fechamento: " + err.message);
+      showAlert("Erro ao finalizar fechamento: " + err.message);
     }
   };
 
@@ -516,11 +529,11 @@ export default function PDV() {
           break;
         case 'F5':
           if (!showPaymentModal && !showDiscountModal) {
-            if (confirm("Deseja realmente limpar a venda atual?")) {
+            showConfirm("Deseja realmente limpar a venda atual?", () => {
               clearCart();
               setLastScannedItem(null);
               playBeep('error');
-            }
+            });
           }
           break;
         case 'F12':
@@ -635,7 +648,7 @@ export default function PDV() {
             return;
           } else {
             playBeep('error');
-            alert("Código de barras de balança com peso ou valor inválido.");
+            showAlert("Código de barras de balança com peso ou valor inválido.");
             focusBarcode();
             return;
           }
@@ -660,7 +673,7 @@ export default function PDV() {
         }
       } else {
         playBeep('error');
-        alert(`Produto de balança (PLU: ${intPlu6} / ${intPlu5}) não foi encontrado.`);
+        showAlert(`Produto de balança (PLU: ${intPlu6} / ${intPlu5}) não foi encontrado.`);
         focusBarcode();
         return;
       }
@@ -703,9 +716,10 @@ export default function PDV() {
         }
         setBarcodeInput('');
         setShowSearchDropdown(false);
+        focusBarcode();
       } else {
         playBeep('error');
-        alert("Produto não cadastrado ou código inválido.");
+        showAlert("Produto não cadastrado ou código inválido.");
       }
     }
     focusBarcode();
@@ -773,7 +787,7 @@ export default function PDV() {
     if (paymentMethod === 'fiado') {
       if (!selectedClientId) {
         playBeep('error');
-        alert("Por favor, selecione um cliente para realizar a venda fiada.");
+        showAlert("Por favor, selecione um cliente para realizar a venda fiada.");
         return;
       }
       const client = clients.find(c => c.id === parseInt(selectedClientId, 10));
@@ -781,7 +795,7 @@ export default function PDV() {
         const totalComDebito = (client.saldo_devedor || 0) + total;
         if (client.limite_credito > 0 && totalComDebito > client.limite_credito) {
           playBeep('error');
-          alert(`Esta venda ultrapassa o limite de crédito do cliente ${client.nome}!\nLimite: R$ ${client.limite_credito.toFixed(2)}\nSaldo Devedor Atual: R$ ${(client.saldo_devedor || 0).toFixed(2)}\nValor da Venda: R$ ${total.toFixed(2)}\nTotal Acumulado: R$ ${totalComDebito.toFixed(2)}`);
+          showAlert(`Esta venda ultrapassa o limite de crédito do cliente ${client.nome}!\n\nLimite: R$ ${client.limite_credito.toFixed(2)}\nSaldo Devedor Atual: R$ ${(client.saldo_devedor || 0).toFixed(2)}\nValor da Venda: R$ ${total.toFixed(2)}\nTotal Acumulado: R$ ${totalComDebito.toFixed(2)}`);
           return;
         }
       }
@@ -935,7 +949,7 @@ export default function PDV() {
       focusBarcode();
     } catch (e) {
       console.error(e);
-      alert("Erro ao finalizar venda: " + e.message);
+      showAlert("Erro ao finalizar venda: " + e.message);
     }
   };
 
@@ -1150,11 +1164,11 @@ export default function PDV() {
 
           <button
             onClick={() => {
-              if (confirm("Limpar carrinho atual?")) {
+              showConfirm("Limpar carrinho atual?", () => {
                 clearCart();
                 setLastScannedItem(null);
                 playBeep('error');
-              }
+              });
             }}
             disabled={items.length === 0}
             className="w-full flex items-center justify-between px-5 py-3 rounded-2xl bg-brand-danger/10 hover:bg-brand-danger/20 text-brand-danger transition-all font-semibold text-xs border border-brand-danger/20 disabled:opacity-50"
@@ -1499,7 +1513,7 @@ export default function PDV() {
                           </div>
 
                           {selectedClient && (
-                            <div className="p-4 rounded-xl bg-brand-dark/40 border border-brand-border/60 space-y-2 animate-in fade-in duration-200 text-xs font-semibold">
+                            <div className="p-4 rounded-xl bg-brand-dark/40 border border-brand-border/60 space-y-2 animate-in fade-in duration-200 text-xs font-semibold text-left">
                               <div className="flex justify-between items-center">
                                 <span className="text-gray-500 uppercase text-[9px] font-bold">Saldo Devedor:</span>
                                 <span className="text-brand-warning font-black">R$ {(selectedClient.saldo_devedor || 0).toFixed(2)}</span>
@@ -1519,7 +1533,7 @@ export default function PDV() {
                                   (selectedClient.limite_credito > 0 && (selectedClient.limite_credito - (selectedClient.saldo_devedor || 0) - total) < 0)
                                     ? 'text-brand-danger font-black animate-pulse'
                                     : 'text-brand-success font-black'
-                                }`}>
+                                  }`}>
                                   {selectedClient.limite_credito > 0 
                                     ? `R$ ${Math.max(0, selectedClient.limite_credito - (selectedClient.saldo_devedor || 0)).toFixed(2)}` 
                                     : 'Ilimitado'
@@ -1690,7 +1704,7 @@ export default function PDV() {
             </div>
 
             {/* Manual Override Input */}
-            <div className="space-y-2 mb-6">
+            <div className="space-y-2 mb-6 text-left">
               <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Digitação Manual do Peso (KG)</label>
               <div className="relative">
                 <input
@@ -2043,6 +2057,80 @@ export default function PDV() {
                   <span>Fechar Caixa e Imprimir</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL: ALERT CUSTOM MODAL (NO-BLOCKING)
+          ======================================================== */}
+      {alertModal && (
+        <div className="absolute inset-0 bg-brand-dark/90 backdrop-blur-md flex items-center justify-center z-50 select-none animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-brand-card border border-brand-border rounded-3xl p-6 shadow-2xl relative overflow-hidden flex flex-col items-center">
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-brand-accent/10 rounded-full blur-3xl"></div>
+            
+            <div className={`h-12 w-12 rounded-xl flex items-center justify-center mb-4 ${
+              alertModal.type === 'success' 
+                ? 'bg-brand-success/10 border border-brand-success/20 text-brand-success' 
+                : 'bg-brand-danger/10 border border-brand-danger/20 text-brand-danger'
+            }`}>
+              {alertModal.type === 'success' ? <Check size={24} /> : <X size={24} />}
+            </div>
+
+            <h3 className="text-md font-bold text-white text-center mb-2">{alertModal.title || 'Alerta'}</h3>
+            <p className="text-xs text-gray-400 text-center mb-6 max-w-xs font-semibold leading-relaxed whitespace-pre-line">
+              {alertModal.message}
+            </p>
+
+            <button
+              onClick={() => {
+                const onConf = alertModal.onConfirm;
+                setAlertModal(null);
+                if (onConf) onConf();
+                focusBarcode();
+              }}
+              className="w-full bg-brand-accent hover:bg-brand-accentHover text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL: CONFIRM CUSTOM MODAL (NO-BLOCKING)
+          ======================================================== */}
+      {confirmModal && (
+        <div className="absolute inset-0 bg-brand-dark/90 backdrop-blur-sm flex items-center justify-center z-50 select-none animate-in fade-in duration-150">
+          <div className="w-full max-w-sm bg-brand-card border border-brand-border rounded-3xl p-6 shadow-2xl relative overflow-hidden flex flex-col items-center">
+            <div className="h-12 w-12 bg-brand-warning/10 border border-brand-warning/20 text-brand-warning rounded-xl flex items-center justify-center mb-4">
+              <HelpCircle size={24} />
+            </div>
+
+            <h3 className="text-md font-bold text-white text-center mb-2">Confirmação</h3>
+            <p className="text-xs text-gray-400 text-center mb-6 max-w-xs font-semibold leading-relaxed">
+              {confirmModal.message}
+            </p>
+
+            <div className="flex space-x-3 w-full">
+              <button
+                onClick={() => { setConfirmModal(null); focusBarcode(); }}
+                className="flex-1 bg-brand-border hover:bg-brand-border/80 text-gray-300 font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Não
+              </button>
+              <button
+                onClick={() => {
+                  const onConf = confirmModal.onConfirm;
+                  setConfirmModal(null);
+                  if (onConf) onConf();
+                  focusBarcode();
+                }}
+                className="flex-1 bg-brand-danger hover:bg-red-500 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-lg shadow-red-500/10"
+              >
+                Sim
+              </button>
             </div>
           </div>
         </div>
