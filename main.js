@@ -166,6 +166,10 @@ app.whenReady().then(() => {
     return dbService.getHistoricoCaixas();
   });
 
+  ipcMain.handle('caixa:getUltimoFechamento', async () => {
+    return dbService.getUltimoFechamento();
+  });
+
   // XML
   ipcMain.handle('xml:importarNotaFiscal', async (event, xmlData, usuarioId) => {
     return dbService.importarNotaFiscal(xmlData, usuarioId);

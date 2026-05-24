@@ -2023,6 +2023,31 @@ const dbService = {
       console.error("Error in getHistoricoCaixas:", err);
       return [];
     }
+  },
+
+  getUltimoFechamento: () => {
+    if (db.isJson) {
+      if (!db._data.caixa_sessoes) return null;
+      const closed = db._data.caixa_sessoes.filter(s => s.status === 'fechado');
+      if (closed.length === 0) return null;
+      closed.sort((a, b) => b.id - a.id);
+      const last = closed[0];
+      const u = db._data.usuarios.find(user => user.id === last.usuario_id);
+      return { ...last, operador_nome: u ? u.name : 'Desconhecido' };
+    }
+    try {
+      return db.prepare(`
+        SELECT s.*, u.name as operador_nome
+        FROM caixa_sessoes s
+        JOIN usuarios u ON s.usuario_id = u.id
+        WHERE s.status = 'fechado'
+        ORDER BY s.id DESC
+        LIMIT 1
+      `).get() || null;
+    } catch (err) {
+      console.error("Error in getUltimoFechamento:", err);
+      return null;
+    }
   }
 };
 

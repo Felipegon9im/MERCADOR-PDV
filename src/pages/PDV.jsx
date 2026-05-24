@@ -67,6 +67,7 @@ export default function PDV() {
   const [activeSession, setActiveSession] = useState(null);
   const [alertModal, setAlertModal] = useState(null); // { title, message, type: 'error'|'success', onConfirm }
   const [confirmModal, setConfirmModal] = useState(null); // { message, onConfirm }
+  const [lastClosure, setLastClosure] = useState(null);
 
   const showAlert = (message, type = 'error', title = 'Aviso', onConfirm = null) => {
     playBeep(type === 'success' ? 'chime' : 'error');
@@ -244,6 +245,15 @@ export default function PDV() {
       } else {
         setActiveSession(null);
         setShowOpeningModal(true);
+        try {
+          const last = await api.caixa.getUltimoFechamento();
+          setLastClosure(last);
+          if (last && last.valor_fechamento_dinheiro !== null) {
+            setOpeningFloat(last.valor_fechamento_dinheiro.toString());
+          }
+        } catch (e) {
+          console.error("Erro ao buscar último fechamento:", e);
+        }
       }
     } catch (err) {
       console.error("Erro ao verificar sessão ativa de caixa:", err);
@@ -1787,6 +1797,22 @@ export default function PDV() {
             <p className="text-xs text-gray-400 text-center mb-6 max-w-xs font-semibold leading-relaxed">
               Olá, <span className="text-brand-accent">{user?.name}</span>! Para iniciar as vendas do dia, informe o valor de troco disponível na gaveta do caixa.
             </p>
+
+            {lastClosure && (
+              <div className="w-full bg-brand-dark/50 border border-brand-border/60 rounded-2xl p-4 mb-4 text-left animate-in fade-in duration-200">
+                <span className="text-[9px] font-extrabold text-gray-500 uppercase tracking-wider block mb-2">📥 ÚLTIMO FECHAMENTO OPERACIONAL</span>
+                <div className="grid grid-cols-2 gap-2 text-[11px] font-semibold">
+                  <div className="text-gray-400">Operador:</div>
+                  <div className="text-white text-right font-bold truncate">{lastClosure.operador_nome.toUpperCase()}</div>
+                  
+                  <div className="text-gray-400">Data/Hora:</div>
+                  <div className="text-white text-right">{new Date(lastClosure.data_fechamento).toLocaleString('pt-BR')}</div>
+                  
+                  <div className="text-gray-400">Troco deixado (gaveta):</div>
+                  <div className="text-brand-success text-right font-black">R$ {lastClosure.valor_fechamento_dinheiro.toFixed(2)}</div>
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleOpenCaixa} className="w-full space-y-5">
               <div className="space-y-2">

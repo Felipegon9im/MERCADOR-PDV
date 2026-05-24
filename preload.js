@@ -42,7 +42,8 @@ contextBridge.exposeInMainWorld('api', {
     fecharCaixa: (sessaoId, valorFechamentoDinheiro, valorFechamentoCalculado, usuarioId) => 
       ipcRenderer.invoke('caixa:fecharCaixa', sessaoId, valorFechamentoDinheiro, valorFechamentoCalculado, usuarioId),
     getRelatorioFechamento: (sessaoId) => ipcRenderer.invoke('caixa:getRelatorioFechamento', sessaoId),
-    getHistoricoCaixas: () => ipcRenderer.invoke('caixa:getHistoricoCaixas')
+    getHistoricoCaixas: () => ipcRenderer.invoke('caixa:getHistoricoCaixas'),
+    getUltimoFechamento: () => ipcRenderer.invoke('caixa:getUltimoFechamento')
   },
   
   // Sales & Dashboard
