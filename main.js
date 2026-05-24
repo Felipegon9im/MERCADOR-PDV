@@ -133,6 +133,39 @@ app.whenReady().then(() => {
     return dbService.getGraficoVendas();
   });
 
+  // Cash Register Sessions
+  ipcMain.handle('caixa:getSessaoAtiva', async (event, usuarioId) => {
+    return dbService.getSessaoAtiva(usuarioId);
+  });
+
+  ipcMain.handle('caixa:abrirCaixa', async (event, usuarioId, valorAbertura) => {
+    return dbService.abrirCaixa(usuarioId, valorAbertura);
+  });
+
+  ipcMain.handle('caixa:lancarMovimentacaoCaixa', async (event, sessaoId, tipo, valor, motivo, usuarioId) => {
+    return dbService.lancarMovimentacaoCaixa(sessaoId, tipo, valor, motivo, usuarioId);
+  });
+
+  ipcMain.handle('caixa:getMovimentacoesSessao', async (event, sessaoId) => {
+    return dbService.getMovimentacoesSessao(sessaoId);
+  });
+
+  ipcMain.handle('caixa:getValoresEsperadosCaixa', async (event, sessaoId) => {
+    return dbService.getValoresEsperadosCaixa(sessaoId);
+  });
+
+  ipcMain.handle('caixa:fecharCaixa', async (event, sessaoId, valorFechamentoDinheiro, valorFechamentoCalculado, usuarioId) => {
+    return dbService.fecharCaixa(sessaoId, valorFechamentoDinheiro, valorFechamentoCalculado, usuarioId);
+  });
+
+  ipcMain.handle('caixa:getRelatorioFechamento', async (event, sessaoId) => {
+    return dbService.getRelatorioFechamento(sessaoId);
+  });
+
+  ipcMain.handle('caixa:getHistoricoCaixas', async () => {
+    return dbService.getHistoricoCaixas();
+  });
+
   // XML
   ipcMain.handle('xml:importarNotaFiscal', async (event, xmlData, usuarioId) => {
     return dbService.importarNotaFiscal(xmlData, usuarioId);

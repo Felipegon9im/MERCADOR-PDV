@@ -63,6 +63,23 @@ export default function PDV() {
   // Totals calculations
   const { subtotal, total } = getTotals();
 
+  // Cash Register Session states
+  const [activeSession, setActiveSession] = useState(null);
+  const [showOpeningModal, setShowOpeningModal] = useState(false);
+  const [openingFloat, setOpeningFloat] = useState('');
+  
+  // Suprimento / Sangria states
+  const [showMovModal, setShowMovModal] = useState(false);
+  const [movType, setMovType] = useState('suprimento'); // suprimento or sangria
+  const [movAmount, setMovAmount] = useState('');
+  const [movReason, setMovReason] = useState('');
+  
+  // Closure states
+  const [showClosureModal, setShowClosureModal] = useState(false);
+  const [closureCalculated, setClosureCalculated] = useState(0);
+  const [closureCounted, setClosureCounted] = useState('');
+  const [closureRelatorio, setClosureRelatorio] = useState(null);
+
   // Search States
   const [barcodeInput, setBarcodeInput] = useState('');
   const [productSearchResults, setProductSearchResults] = useState([]);
@@ -205,6 +222,234 @@ export default function PDV() {
     focusBarcode();
   };
 
+  // Cash register session check on mount
+  const checkSession = async () => {
+    try {
+      const active = await api.caixa.getSessaoAtiva(user.id);
+      if (active) {
+        setActiveSession(active);
+        setShowOpeningModal(false);
+      } else {
+        setActiveSession(null);
+        setShowOpeningModal(true);
+      }
+    } catch (err) {
+      console.error("Erro ao verificar sessão ativa de caixa:", err);
+      setShowOpeningModal(true); // Bloqueia por segurança
+    }
+  };
+
+  const handleOpenCaixa = async (e) => {
+    if (e) e.preventDefault();
+    const float = parseFloat(openingFloat);
+    if (isNaN(float) || float < 0) {
+      playBeep('error');
+      alert("Por favor, insira um valor inicial de troco válido (R$ 0,00 ou maior).");
+      return;
+    }
+    try {
+      await api.caixa.abrirCaixa(user.id, float);
+      playBeep('chime');
+      const active = await api.caixa.getSessaoAtiva(user.id);
+      setActiveSession(active);
+      setShowOpeningModal(false);
+      setOpeningFloat('');
+      focusBarcode();
+    } catch (err) {
+      console.error("Erro ao abrir caixa:", err);
+      alert("Erro ao realizar abertura de caixa: " + err.message);
+    }
+  };
+
+  const handleLancarMovimentacao = async (e) => {
+    if (e) e.preventDefault();
+    const val = parseFloat(movAmount);
+    if (isNaN(val) || val <= 0) {
+      playBeep('error');
+      alert("Por favor, insira um valor de movimentação válido e maior que zero.");
+      return;
+    }
+    if (!movReason.trim()) {
+      playBeep('error');
+      alert("Por favor, insira o motivo desta movimentação.");
+      return;
+    }
+    
+    if (movType === 'sangria') {
+      try {
+        const resExp = await api.caixa.getValoresEsperadosCaixa(activeSession.id);
+        if (resExp && val > resExp.total_esperado) {
+          playBeep('error');
+          alert(`Valor de sangria (R$ ${val.toFixed(2)}) é maior do que o valor total esperado em dinheiro no caixa (R$ ${resExp.total_esperado.toFixed(2)})!`);
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    try {
+      await api.caixa.lancarMovimentacaoCaixa(activeSession.id, movType, val, movReason.trim(), user.id);
+      playBeep('success');
+      setShowMovModal(false);
+      setMovAmount('');
+      setMovReason('');
+      focusBarcode();
+    } catch (err) {
+      console.error("Erro ao lançar movimentação:", err);
+      alert("Erro ao registrar movimentação de caixa: " + err.message);
+    }
+  };
+
+  const handleOpenClosure = async () => {
+    if (!activeSession) return;
+    try {
+      const rel = await api.caixa.getRelatorioFechamento(activeSession.id);
+      const expected = await api.caixa.getValoresEsperadosCaixa(activeSession.id);
+      setClosureRelatorio(rel);
+      setClosureCalculated(expected ? expected.total_esperado : 0);
+      setClosureCounted('');
+      setShowClosureModal(true);
+      playBeep('success');
+    } catch (err) {
+      console.error("Erro ao carregar dados de fechamento:", err);
+      alert("Erro ao carregar dados para o fechamento: " + err.message);
+    }
+  };
+
+  const handleConfirmClosure = async () => {
+    const counted = parseFloat(closureCounted);
+    if (isNaN(counted) || counted < 0) {
+      playBeep('error');
+      alert("Por favor, insira o valor físico contado na gaveta.");
+      return;
+    }
+    
+    try {
+      await api.caixa.fecharCaixa(activeSession.id, counted, closureCalculated, user.id);
+      playBeep('chime');
+      
+      const movsHtml = closureRelatorio.movimentacoes && closureRelatorio.movimentacoes.length > 0
+        ? closureRelatorio.movimentacoes.map(m => `
+          <div class="row">
+            <span>&nbsp;&nbsp;${m.tipo.toUpperCase()} (${m.motivo}):</span>
+            <span>${m.tipo === 'sangria' ? '-' : '+'} R$ ${m.valor.toFixed(2)}</span>
+          </div>
+        `).join('')
+        : '<div>&nbsp;&nbsp;Nenhuma movimentação realizada.</div>';
+        
+      const diff = counted - closureCalculated;
+      const diffMsg = diff === 0 ? "Correto" : diff > 0 ? `Sobra de R$ ${diff.toFixed(2)}` : `Quebra de R$ ${Math.abs(diff).toFixed(2)}`;
+      
+      const closureHtml = `
+        <html>
+          <head>
+            <style>
+              body { font-family: 'Courier New', Courier, monospace; font-size: 11px; margin: 0; padding: 10px; color: black; }
+              .text-center { text-align: center; }
+              .divider { border-top: 1px dashed black; margin: 5px 0; }
+              .row { display: flex; justify-content: space-between; }
+              .bold { font-weight: bold; }
+              .section-title { font-weight: bold; margin-top: 8px; text-transform: uppercase; }
+            </style>
+          </head>
+          <body>
+            <div class="text-center">
+              <span class="bold">MERCADO & CONVENIENCIA</span><br/>
+              <div class="divider"></div>
+              <span class="bold">COMPROVANTE DE FECHAMENTO</span><br/>
+              <span>Caixa #${activeSession.id} - ${new Date().toLocaleString('pt-BR')}</span>
+            </div>
+            <div class="divider"></div>
+            
+            <div class="row">
+              <span>Operador:</span>
+              <span class="bold">${user.name.toUpperCase()}</span>
+            </div>
+            <div class="row">
+              <span>Abertura:</span>
+              <span>${new Date(activeSession.data_abertura).toLocaleString('pt-BR')}</span>
+            </div>
+            <div class="row">
+              <span>Fechamento:</span>
+              <span>${new Date().toLocaleString('pt-BR')}</span>
+            </div>
+            
+            <div class="divider"></div>
+            <div class="section-title">Resumo Financeiro</div>
+            <div class="divider"></div>
+            <div class="row">
+              <span>Fundo de Troco Inicial:</span>
+              <span>R$ ${closureRelatorio.sessao.valor_abertura.toFixed(2)}</span>
+            </div>
+            <div class="row">
+              <span>Vendas Dinheiro:</span>
+              <span>R$ ${closureRelatorio.vendas.dinheiro.toFixed(2)}</span>
+            </div>
+            <div class="row">
+              <span>Vendas PIX:</span>
+              <span>R$ ${closureRelatorio.vendas.pix.toFixed(2)}</span>
+            </div>
+            <div class="row">
+              <span>Vendas Débito:</span>
+              <span>R$ ${closureRelatorio.vendas.debito.toFixed(2)}</span>
+            </div>
+            <div class="row">
+              <span>Vendas Crédito:</span>
+              <span>R$ ${closureRelatorio.vendas.credito.toFixed(2)}</span>
+            </div>
+            <div class="row">
+              <span>Vendas Fiado (Prazo):</span>
+              <span>R$ ${closureRelatorio.vendas.fiado.toFixed(2)}</span>
+            </div>
+            <div class="row bold">
+              <span>Total Faturado:</span>
+              <span>R$ ${closureRelatorio.vendas.total.toFixed(2)}</span>
+            </div>
+            
+            <div class="divider"></div>
+            <div class="section-title">Movimentações de Dinheiro</div>
+            <div class="divider"></div>
+            ${movsHtml}
+            
+            <div class="divider"></div>
+            <div class="section-title">Conciliação de Caixa</div>
+            <div class="divider"></div>
+            <div class="row">
+              <span>Dinheiro Esperado:</span>
+              <span class="bold">R$ ${closureCalculated.toFixed(2)}</span>
+            </div>
+            <div class="row">
+              <span>Dinheiro Contado:</span>
+              <span class="bold">R$ ${counted.toFixed(2)}</span>
+            </div>
+            <div class="row bold" style="font-size: 12px;">
+              <span>Diferença:</span>
+              <span>${diffMsg}</span>
+            </div>
+            
+            <div class="divider"></div>
+            <div class="text-center" style="margin-top:20px;">
+              <span>Assinatura do Operador:</span><br/><br/>
+              <span>_______________________________</span><br/>
+              <span class="bold">${user.name.toUpperCase()}</span>
+            </div>
+          </body>
+        </html>
+      `;
+      
+      await api.print.imprimirCupom(closureHtml);
+      
+      alert("Caixa fechado com sucesso! O comprovante foi enviado para a impressora. O sistema retornará para a tela de login.");
+      const { logout } = useAuthStore.getState();
+      await logout();
+      window.location.reload();
+    } catch (err) {
+      console.error("Erro ao fechar caixa:", err);
+      alert("Erro ao finalizar fechamento: " + err.message);
+    }
+  };
+
   // Load all products and clients
   const fetchProducts = async () => {
     try {
@@ -225,6 +470,7 @@ export default function PDV() {
   };
 
   useEffect(() => {
+    checkSession();
     fetchProducts();
     fetchClients();
     focusBarcode();
@@ -921,6 +1167,33 @@ export default function PDV() {
           </button>
         </div>
 
+        {/* Controle de Fluxo de Caixa */}
+        {activeSession && (
+          <div className="border-t border-brand-border/50 pt-5 space-y-3">
+            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Fluxo de Caixa (Turno #{activeSession.id})</span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => { setMovType('suprimento'); setShowMovModal(true); }}
+                className="flex items-center justify-center space-x-2 px-3 py-3 rounded-xl bg-brand-border/20 hover:bg-brand-border/40 text-white font-bold text-xs border border-brand-border/30 transition-all cursor-pointer"
+              >
+                <span>📥 Suprimento</span>
+              </button>
+              <button
+                onClick={() => { setMovType('sangria'); setShowMovModal(true); }}
+                className="flex items-center justify-center space-x-2 px-3 py-3 rounded-xl bg-brand-border/20 hover:bg-brand-border/40 text-white font-bold text-xs border border-brand-border/30 transition-all cursor-pointer"
+              >
+                <span>📤 Sangria</span>
+              </button>
+            </div>
+            <button
+              onClick={handleOpenClosure}
+              className="w-full flex items-center justify-center space-x-2 px-3 py-3.5 rounded-xl bg-brand-danger/10 hover:bg-brand-danger/20 text-brand-danger font-black text-xs border border-brand-danger/30 transition-all uppercase tracking-wider cursor-pointer"
+            >
+              <span>🏁 Fechar Caixa (Fim de Turno)</span>
+            </button>
+          </div>
+        )}
+
         {/* Shortcuts list Footer */}
         <div className="border-t border-brand-border/50 pt-5">
           <div className="flex justify-between items-center mb-3">
@@ -1478,6 +1751,299 @@ export default function PDV() {
                 </span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL: ABERTURA DE CAIXA (FORÇADA SE SEM SESSÃO)
+          ======================================================== */}
+      {showOpeningModal && (
+        <div className="absolute inset-0 bg-brand-dark/95 backdrop-blur-md flex items-center justify-center z-50 select-none">
+          <div className="w-full max-w-md bg-brand-card border border-brand-border rounded-3xl p-8 shadow-2xl relative overflow-hidden flex flex-col items-center">
+            {/* Decorative Glow */}
+            <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-accent/15 rounded-full blur-3xl"></div>
+            <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl"></div>
+            
+            <div className="h-16 w-16 bg-brand-accent/10 border border-brand-accent/20 text-brand-accent rounded-2xl flex items-center justify-center mb-6">
+              <DollarSign size={32} />
+            </div>
+
+            <h3 className="text-xl font-bold text-white text-center mb-2">Abertura de Caixa</h3>
+            <p className="text-xs text-gray-400 text-center mb-6 max-w-xs font-semibold leading-relaxed">
+              Olá, <span className="text-brand-accent">{user?.name}</span>! Para iniciar as vendas do dia, informe o valor de troco disponível na gaveta do caixa.
+            </p>
+
+            <form onSubmit={handleOpenCaixa} className="w-full space-y-5">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Fundo de Troco Inicial (R$)</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-extrabold text-gray-500">R$</span>
+                  <input
+                    autoFocus
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0,00"
+                    value={openingFloat}
+                    onChange={(e) => setOpeningFloat(e.target.value)}
+                    className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-2xl py-4 pl-12 pr-4 text-lg font-black text-white outline-none transition-colors shadow-inner"
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const { logout } = useAuthStore.getState();
+                    await logout();
+                    window.location.reload();
+                  }}
+                  className="flex-1 bg-brand-border hover:bg-brand-border/80 text-gray-300 font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  Sair do Sistema
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-brand-success hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/10 glow-emerald cursor-pointer"
+                >
+                  Iniciar Turno
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL: MOVIMENTAÇÃO DE CAIXA (SUPRIMENTO / SANGRIA)
+          ======================================================== */}
+      {showMovModal && (
+        <div className="absolute inset-0 bg-brand-dark/80 backdrop-blur-sm flex items-center justify-center z-40 select-none">
+          <div className="w-full max-w-md bg-brand-card border border-brand-border rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-150 relative overflow-hidden">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                <DollarSign size={18} className="text-brand-accent" />
+                <span>{movType === 'suprimento' ? 'Lançar Suprimento (Entrada)' : 'Lançar Sangria (Retirada)'}</span>
+              </h3>
+              <button
+                onClick={() => { setShowMovModal(false); focusBarcode(); }}
+                className="p-1 text-gray-500 hover:text-white rounded-lg transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleLancarMovimentacao} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Valor (R$)</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-500">R$</span>
+                  <input
+                    autoFocus
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    placeholder="0,00"
+                    value={movAmount}
+                    onChange={(e) => setMovAmount(e.target.value)}
+                    className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 pl-10 pr-4 text-sm font-bold text-white outline-none transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Justificativa / Motivo</label>
+                <textarea
+                  placeholder={movType === 'suprimento' ? "Ex: Troco para moedas" : "Ex: Sangria de segurança (acumulado)"}
+                  value={movReason}
+                  onChange={(e) => setMovReason(e.target.value)}
+                  rows="3"
+                  className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none transition-colors resize-none"
+                />
+              </div>
+
+              <div className="flex space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowMovModal(false); focusBarcode(); }}
+                  className="flex-1 bg-brand-border hover:bg-brand-border/80 text-gray-300 font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className={`flex-1 font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition-colors text-white cursor-pointer ${
+                    movType === 'suprimento' 
+                      ? 'bg-brand-success hover:bg-emerald-500 shadow-lg shadow-emerald-500/10' 
+                      : 'bg-brand-danger hover:bg-red-500 shadow-lg shadow-red-500/10'
+                  }`}
+                >
+                  Confirmar Lançamento
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL: FECHAMENTO DE CAIXA
+          ======================================================== */}
+      {showClosureModal && closureRelatorio && (
+        <div className="absolute inset-0 bg-brand-dark/85 backdrop-blur-md flex items-center justify-center z-50 select-none">
+          <div className="w-full max-w-2xl bg-brand-card border border-brand-border rounded-3xl p-8 shadow-2xl flex animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto relative overflow-hidden">
+            {/* Decorative Glow */}
+            <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-danger/10 rounded-full blur-3xl"></div>
+            
+            <div className="flex-1 pr-6 border-r border-brand-border/50 space-y-6">
+              <div>
+                <span className="text-[10px] text-brand-accent font-extrabold uppercase tracking-widest block mb-1">Encerramento de Turno</span>
+                <h3 className="text-lg font-bold text-white leading-tight">Resumo Operacional de Caixa</h3>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-brand-dark/40 border border-brand-border/60 rounded-2xl p-4">
+                  <span className="text-[9px] text-gray-500 font-bold uppercase block leading-none mb-1">Abertura / Fundo Troco</span>
+                  <span className="text-base font-black text-white">R$ {closureRelatorio.sessao.valor_abertura.toFixed(2)}</span>
+                </div>
+                <div className="bg-brand-dark/40 border border-brand-border/60 rounded-2xl p-4">
+                  <span className="text-[9px] text-gray-500 font-bold uppercase block leading-none mb-1">Vendas Dinheiro</span>
+                  <span className="text-base font-black text-white">R$ {closureRelatorio.vendas.dinheiro.toFixed(2)}</span>
+                </div>
+                <div className="bg-brand-dark/40 border border-brand-border/60 rounded-2xl p-4">
+                  <span className="text-[9px] text-gray-500 font-bold uppercase block leading-none mb-1">Suprimentos (+)</span>
+                  <span className="text-base font-black text-brand-success">R$ {(closureRelatorio.movimentacoes || []).filter(m => m.tipo === 'suprimento').reduce((acc, m) => acc + m.valor, 0).toFixed(2)}</span>
+                </div>
+                <div className="bg-brand-dark/40 border border-brand-border/60 rounded-2xl p-4">
+                  <span className="text-[9px] text-gray-500 font-bold uppercase block leading-none mb-1">Sangrias (-)</span>
+                  <span className="text-base font-black text-brand-danger">R$ {(closureRelatorio.movimentacoes || []).filter(m => m.tipo === 'sangria').reduce((acc, m) => acc + m.valor, 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Payment Methods breakdown */}
+              <div className="space-y-2 bg-brand-dark/20 border border-brand-border/30 rounded-2xl p-4 text-xs font-semibold text-gray-300">
+                <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest block mb-2">Outros Meios (Sem Efeito em Dinheiro Gaveta)</span>
+                <div className="flex justify-between items-center py-1">
+                  <span>PIX:</span>
+                  <span className="text-white">R$ {closureRelatorio.vendas.pix.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span>Cartão Débito:</span>
+                  <span className="text-white">R$ {closureRelatorio.vendas.debito.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span>Cartão Crédito:</span>
+                  <span className="text-white">R$ {closureRelatorio.vendas.credito.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center py-1 border-t border-brand-border/20 pt-2">
+                  <span>Fiado (A Prazo):</span>
+                  <span className="text-brand-warning">R$ {closureRelatorio.vendas.fiado.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Expected Total */}
+              <div className="p-4 rounded-2xl bg-brand-accent/10 border border-brand-accent/20 flex justify-between items-center">
+                <div>
+                  <span className="text-[9px] font-bold text-brand-accent uppercase tracking-widest block leading-none mb-1">Dinheiro Esperado na Gaveta</span>
+                  <span className="text-[10px] text-gray-400 font-medium">Fórmula: Inicial + Vendas Dinheiro + Suprimentos - Sangrias</span>
+                </div>
+                <span className="text-2xl font-black text-brand-accent">R$ {closureCalculated.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Right side: counting input and reconciliation */}
+            <div className="w-[280px] pl-6 flex flex-col justify-between">
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-base font-bold text-white mb-1">Conciliação</h3>
+                  <p className="text-[10px] text-gray-500 font-medium">Conte as cédulas e moedas físicas na gaveta e digite abaixo.</p>
+                </div>
+
+                {/* Input for counted cash */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Dinheiro Físico Contado (R$)</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-extrabold text-gray-500">R$</span>
+                    <input
+                      autoFocus
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0,00"
+                      value={closureCounted}
+                      onChange={(e) => setClosureCounted(e.target.value)}
+                      className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-2xl py-4 pl-12 pr-4 text-xl font-black text-white outline-none transition-colors shadow-inner"
+                      onKeyDown={(e) => e.key === 'Enter' && handleConfirmClosure()}
+                    />
+                  </div>
+                </div>
+
+                {/* Live Reconciliation Calculations */}
+                {(() => {
+                  const countedVal = parseFloat(closureCounted || '0');
+                  const diff = countedVal - closureCalculated;
+                  
+                  return (
+                    <div className="p-4 rounded-2xl bg-brand-dark/40 border border-brand-border/60 space-y-3">
+                      <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest block leading-none">Resultado da Conciliação</span>
+                      <div className="flex justify-between items-center text-xs font-semibold">
+                        <span className="text-gray-400">Diferença de Caixa:</span>
+                        <span className={`font-black text-sm ${
+                          diff === 0 
+                            ? 'text-brand-success' 
+                            : diff > 0 
+                            ? 'text-brand-success' 
+                            : 'text-brand-danger'
+                        }`}>
+                          {diff === 0 
+                            ? 'R$ 0,00' 
+                            : diff > 0 
+                            ? `+ R$ ${diff.toFixed(2)}` 
+                            : `- R$ ${Math.abs(diff).toFixed(2)}`
+                          }
+                        </span>
+                      </div>
+                      
+                      {/* Badge status */}
+                      <div className={`py-2 px-3 rounded-xl border text-[10px] font-extrabold uppercase tracking-wider text-center leading-none ${
+                        diff === 0
+                          ? 'bg-brand-success/15 border-brand-success/30 text-brand-success'
+                          : diff > 0
+                          ? 'bg-brand-success/20 border-brand-success/40 text-brand-success animate-pulse'
+                          : 'bg-brand-danger/15 border-brand-danger/30 text-brand-danger animate-pulse'
+                      }`}>
+                        {diff === 0 
+                          ? '✅ CAIXA CORRETO' 
+                          : diff > 0 
+                          ? '🌟 SOBRA DE CAIXA' 
+                          : '⚠️ QUEBRA DE CAIXA (FALTA)'
+                        }
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-3 mt-8">
+                <button
+                  onClick={() => { setShowClosureModal(false); focusBarcode(); }}
+                  className="w-full bg-brand-border hover:bg-brand-border/80 text-gray-300 font-bold py-3.5 rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Voltar ao Caixa (Esc)
+                </button>
+                <button
+                  onClick={handleConfirmClosure}
+                  className="w-full bg-brand-danger hover:bg-red-500 text-white font-bold py-4 rounded-xl text-xs uppercase tracking-wider transition-colors shadow-lg shadow-red-500/10 flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <X size={14} />
+                  <span>Fechar Caixa e Imprimir</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -31,6 +31,20 @@ contextBridge.exposeInMainWorld('api', {
     getClienteExtrato: (clienteId) => ipcRenderer.invoke('db:getClienteExtrato', clienteId)
   },
   
+  // Cash register session management
+  caixa: {
+    getSessaoAtiva: (usuarioId) => ipcRenderer.invoke('caixa:getSessaoAtiva', usuarioId),
+    abrirCaixa: (usuarioId, valorAbertura) => ipcRenderer.invoke('caixa:abrirCaixa', usuarioId, valorAbertura),
+    lancarMovimentacaoCaixa: (sessaoId, tipo, valor, motivo, usuarioId) => 
+      ipcRenderer.invoke('caixa:lancarMovimentacaoCaixa', sessaoId, tipo, valor, motivo, usuarioId),
+    getMovimentacoesSessao: (sessaoId) => ipcRenderer.invoke('caixa:getMovimentacoesSessao', sessaoId),
+    getValoresEsperadosCaixa: (sessaoId) => ipcRenderer.invoke('caixa:getValoresEsperadosCaixa', sessaoId),
+    fecharCaixa: (sessaoId, valorFechamentoDinheiro, valorFechamentoCalculado, usuarioId) => 
+      ipcRenderer.invoke('caixa:fecharCaixa', sessaoId, valorFechamentoDinheiro, valorFechamentoCalculado, usuarioId),
+    getRelatorioFechamento: (sessaoId) => ipcRenderer.invoke('caixa:getRelatorioFechamento', sessaoId),
+    getHistoricoCaixas: () => ipcRenderer.invoke('caixa:getHistoricoCaixas')
+  },
+  
   // Sales & Dashboard
   sales: {
     criarVenda: (venda, itens, usuarioId) => ipcRenderer.invoke('sales:criarVenda', venda, itens, usuarioId),

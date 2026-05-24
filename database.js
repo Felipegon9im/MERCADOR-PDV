@@ -284,6 +284,43 @@ if (typeof db.exec === 'function') {
     console.error("Failed to create client-related tables:", err);
   }
 
+  // Create cash session related tables if they don't exist
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS caixa_sessoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario_id INTEGER NOT NULL,
+        valor_abertura REAL NOT NULL,
+        valor_fechamento_dinheiro REAL,
+        valor_fechamento_calculado REAL,
+        status TEXT CHECK(status IN ('aberto', 'fechado')) DEFAULT 'aberto',
+        data_abertura TEXT DEFAULT CURRENT_TIMESTAMP,
+        data_fechamento TEXT,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+      );
+      CREATE TABLE IF NOT EXISTS caixa_movimentacoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sessao_id INTEGER NOT NULL,
+        tipo TEXT CHECK(tipo IN ('suprimento', 'sangria')) NOT NULL,
+        valor REAL NOT NULL,
+        motivo TEXT,
+        usuario_id INTEGER NOT NULL,
+        data_movimentacao TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (sessao_id) REFERENCES caixa_sessoes(id) ON DELETE CASCADE,
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+      );
+    `);
+  } catch (err) {
+    console.error("Failed to create cash-session tables:", err);
+  }
+
+  // Auto-migration to add sessao_id to vendas
+  try {
+    db.exec("ALTER TABLE vendas ADD COLUMN sessao_id INTEGER REFERENCES caixa_sessoes(id);");
+  } catch (err) {
+    // Column already exists, ignore
+  }
+
   // Seed default data if empty
   const userCount = db.prepare('SELECT count(*) as count FROM usuarios').get().count;
   if (userCount === 0) {
@@ -330,7 +367,11 @@ function initJsonDbFallback(dbPath) {
     fornecedores: [],
     notas_entrada: [],
     notas_itens: [],
-    logs_acoes: []
+    logs_acoes: [],
+    clientes: [],
+    cliente_pagamentos: [],
+    caixa_sessoes: [],
+    caixa_movimentacoes: []
   };
 
   const save = () => {
@@ -385,6 +426,23 @@ function initJsonDbFallback(dbPath) {
       if (!Array.isArray(data.cliente_pagamentos)) {
         data.cliente_pagamentos = [];
         migrated = true;
+      }
+      if (!Array.isArray(data.caixa_sessoes)) {
+        data.caixa_sessoes = [];
+        migrated = true;
+      }
+      if (!Array.isArray(data.caixa_movimentacoes)) {
+        data.caixa_movimentacoes = [];
+        migrated = true;
+      }
+      // Migrate existing sales to support sessao_id field in JSON fallback
+      if (Array.isArray(data.vendas)) {
+        data.vendas.forEach(v => {
+          if (v.sessao_id === undefined) {
+            v.sessao_id = null;
+            migrated = true;
+          }
+        });
       }
       if (migrated) save();
     } catch (e) {
@@ -921,6 +979,9 @@ const dbService = {
     if (db.isJson) {
       const vendaId = db._data.vendas.length ? Math.max(...db._data.vendas.map(v => v.id)) + 1 : 1;
       const dataVenda = new Date().toISOString();
+      const activeSessao = db._data.caixa_sessoes ? db._data.caixa_sessoes.find(s => s.usuario_id === usuarioId && s.status === 'aberto') : null;
+      const sessaoId = activeSessao ? activeSessao.id : null;
+      
       const novaVenda = {
         id: vendaId,
         usuario_id: usuarioId,
@@ -931,7 +992,8 @@ const dbService = {
         troco: venda.troco || 0,
         pago: venda.pago || 0,
         data_venda: dataVenda,
-        cliente_id: venda.cliente_id || null
+        cliente_id: venda.cliente_id || null,
+        sessao_id: sessaoId
       };
       db._data.vendas.push(novaVenda);
 
@@ -996,10 +1058,13 @@ const dbService = {
 
     // SQLite Transaction
     const transaction = db.transaction(() => {
+      const activeSessao = db.prepare("SELECT id FROM caixa_sessoes WHERE usuario_id = ? AND status = 'aberto'").get(usuarioId);
+      const sessaoId = activeSessao ? activeSessao.id : null;
+
       const dataVenda = new Date().toISOString();
       const stmtVenda = db.prepare(`
-        INSERT INTO vendas (usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, cliente_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO vendas (usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, cliente_id, sessao_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const result = stmtVenda.run(
           usuarioId,
@@ -1009,7 +1074,8 @@ const dbService = {
           venda.forma_pagamento,
           venda.troco || 0,
           venda.pago || 0,
-          venda.cliente_id || null
+          venda.cliente_id || null,
+          sessaoId
       );
       const vendaId = result.lastInsertRowid;
 
@@ -1707,6 +1773,256 @@ const dbService = {
 
     extrato = [...compras, ...pagamentos].sort((a, b) => new Date(b.data) - new Date(a.data));
     return { cliente, extrato };
+  },
+
+  // CASH REGISTER SESSIONS
+  getSessaoAtiva: (usuarioId) => {
+    if (db.isJson) {
+      if (!db._data.caixa_sessoes) return null;
+      return db._data.caixa_sessoes.find(s => s.usuario_id === usuarioId && s.status === 'aberto') || null;
+    }
+    try {
+      return db.prepare("SELECT * FROM caixa_sessoes WHERE usuario_id = ? AND status = 'aberto'").get(usuarioId) || null;
+    } catch (err) {
+      console.error("Error in getSessaoAtiva:", err);
+      return null;
+    }
+  },
+
+  abrirCaixa: (usuarioId, valorAbertura) => {
+    const valorNum = parseFloat(valorAbertura) || 0;
+    if (db.isJson) {
+      if (!db._data.caixa_sessoes) db._data.caixa_sessoes = [];
+      const id = db._data.caixa_sessoes.length ? Math.max(...db._data.caixa_sessoes.map(s => s.id)) + 1 : 1;
+      const newSession = {
+        id,
+        usuario_id: usuarioId,
+        valor_abertura: valorNum,
+        valor_fechamento_dinheiro: null,
+        valor_fechamento_calculado: null,
+        status: 'aberto',
+        data_abertura: new Date().toISOString(),
+        data_fechamento: null
+      };
+      db._data.caixa_sessoes.push(newSession);
+      db._save();
+      dbService.logAcao(usuarioId, 'CAIXA_ABERTO', `Caixa aberto com fundo de troco R$ ${valorNum.toFixed(2)}`);
+      return { id };
+    }
+    try {
+      const stmt = db.prepare("INSERT INTO caixa_sessoes (usuario_id, valor_abertura, status) VALUES (?, ?, 'aberto')");
+      const result = stmt.run(usuarioId, valorNum);
+      dbService.logAcao(usuarioId, 'CAIXA_ABERTO', `Caixa aberto com fundo de troco R$ ${valorNum.toFixed(2)}`);
+      return { id: result.lastInsertRowid };
+    } catch (err) {
+      console.error("Error in abrirCaixa:", err);
+      throw err;
+    }
+  },
+
+  lancarMovimentacaoCaixa: (sessaoId, tipo, valor, motivo, usuarioId) => {
+    const valorNum = parseFloat(valor) || 0;
+    if (db.isJson) {
+      if (!db._data.caixa_movimentacoes) db._data.caixa_movimentacoes = [];
+      const id = db._data.caixa_movimentacoes.length ? Math.max(...db._data.caixa_movimentacoes.map(m => m.id)) + 1 : 1;
+      const newMov = {
+        id,
+        sessao_id: sessaoId,
+        tipo,
+        valor: valorNum,
+        motivo: motivo || '',
+        usuario_id: usuarioId,
+        data_movimentacao: new Date().toISOString()
+      };
+      db._data.caixa_movimentacoes.push(newMov);
+      db._save();
+      dbService.logAcao(usuarioId, tipo.toUpperCase(), `${tipo.toUpperCase()} de R$ ${valorNum.toFixed(2)}: ${motivo}`);
+      return { id };
+    }
+    try {
+      const stmt = db.prepare("INSERT INTO caixa_movimentacoes (sessao_id, tipo, valor, motivo, usuario_id) VALUES (?, ?, ?, ?, ?)");
+      const result = stmt.run(sessaoId, tipo, valorNum, motivo || '', usuarioId);
+      dbService.logAcao(usuarioId, tipo.toUpperCase(), `${tipo.toUpperCase()} de R$ ${valorNum.toFixed(2)}: ${motivo}`);
+      return { id: result.lastInsertRowid };
+    } catch (err) {
+      console.error("Error in lancarMovimentacaoCaixa:", err);
+      throw err;
+    }
+  },
+
+  getMovimentacoesSessao: (sessaoId) => {
+    if (db.isJson) {
+      if (!db._data.caixa_movimentacoes) return [];
+      return db._data.caixa_movimentacoes.filter(m => m.sessao_id === sessaoId).reverse();
+    }
+    try {
+      return db.prepare("SELECT * FROM caixa_movimentacoes WHERE sessao_id = ? ORDER BY id DESC").all(sessaoId);
+    } catch (err) {
+      console.error("Error in getMovimentacoesSessao:", err);
+      return [];
+    }
+  },
+
+  getValoresEsperadosCaixa: (sessaoId) => {
+    if (db.isJson) {
+      const sessao = db._data.caixa_sessoes.find(s => s.id === sessaoId);
+      if (!sessao) return null;
+      
+      const vendasDinheiro = db._data.vendas
+        .filter(v => v.sessao_id === sessaoId && v.forma_pagamento === 'dinheiro')
+        .reduce((acc, v) => acc + v.total, 0);
+        
+      const movs = db._data.caixa_movimentacoes ? db._data.caixa_movimentacoes.filter(m => m.sessao_id === sessaoId) : [];
+      const suprimentos = movs.filter(m => m.tipo === 'suprimento').reduce((acc, m) => acc + m.valor, 0);
+      const sangrias = movs.filter(m => m.tipo === 'sangria').reduce((acc, m) => acc + m.valor, 0);
+      
+      const esperado = sessao.valor_abertura + vendasDinheiro + suprimentos - sangrias;
+      return {
+        valor_abertura: sessao.valor_abertura,
+        vendas_dinheiro: vendasDinheiro,
+        suprimentos,
+        sangrias,
+        total_esperado: esperado
+      };
+    }
+    try {
+      const sessao = db.prepare("SELECT * FROM caixa_sessoes WHERE id = ?").get(sessaoId);
+      if (!sessao) return null;
+      
+      const vendasDinheiro = db.prepare("SELECT SUM(total) as total FROM vendas WHERE sessao_id = ? AND forma_pagamento = 'dinheiro'").get(sessaoId).total || 0;
+      
+      const movs = db.prepare("SELECT tipo, SUM(valor) as total FROM caixa_movimentacoes WHERE sessao_id = ? GROUP BY tipo").all(sessaoId);
+      const suprimentos = (movs.find(m => m.tipo === 'suprimento')?.total) || 0;
+      const sangrias = (movs.find(m => m.tipo === 'sangria')?.total) || 0;
+      
+      const esperado = sessao.valor_abertura + vendasDinheiro + suprimentos - sangrias;
+      return {
+        valor_abertura: sessao.valor_abertura,
+        vendas_dinheiro: vendasDinheiro,
+        suprimentos,
+        sangrias,
+        total_esperado: esperado
+      };
+    } catch (err) {
+      console.error("Error in getValoresEsperadosCaixa:", err);
+      return null;
+    }
+  },
+
+  fecharCaixa: (sessaoId, valorFechamentoDinheiro, valorFechamentoCalculado, usuarioId = 1) => {
+    const valorContado = parseFloat(valorFechamentoDinheiro) || 0;
+    const valorCalc = parseFloat(valorFechamentoCalculado) || 0;
+    const dataFechamento = new Date().toISOString();
+    
+    if (db.isJson) {
+      const sIdx = db._data.caixa_sessoes.findIndex(s => s.id === sessaoId);
+      if (sIdx !== -1) {
+        db._data.caixa_sessoes[sIdx].valor_fechamento_dinheiro = valorContado;
+        db._data.caixa_sessoes[sIdx].valor_fechamento_calculado = valorCalc;
+        db._data.caixa_sessoes[sIdx].status = 'fechado';
+        db._data.caixa_sessoes[sIdx].data_fechamento = dataFechamento;
+        db._save();
+        
+        const diff = valorContado - valorCalc;
+        const msgDiff = diff === 0 ? "Correto" : diff > 0 ? `Sobra de R$ ${diff.toFixed(2)}` : `Quebra de R$ ${Math.abs(diff).toFixed(2)}`;
+        dbService.logAcao(usuarioId, 'CAIXA_FECHADO', `Caixa #${sessaoId} fechado. Contado: R$ ${valorContado.toFixed(2)}, Esperado: R$ ${valorCalc.toFixed(2)} (${msgDiff})`);
+        return { success: true };
+      }
+      return { success: false };
+    }
+    try {
+      db.prepare("UPDATE caixa_sessoes SET valor_fechamento_dinheiro = ?, valor_fechamento_calculado = ?, status = 'fechado', data_fechamento = ? WHERE id = ?")
+        .run(valorContado, valorCalc, dataFechamento, sessaoId);
+        
+      const diff = valorContado - valorCalc;
+      const msgDiff = diff === 0 ? "Correto" : diff > 0 ? `Sobra de R$ ${diff.toFixed(2)}` : `Quebra de R$ ${Math.abs(diff).toFixed(2)}`;
+      dbService.logAcao(usuarioId, 'CAIXA_FECHADO', `Caixa #${sessaoId} fechado. Contado: R$ ${valorContado.toFixed(2)}, Esperado: R$ ${valorCalc.toFixed(2)} (${msgDiff})`);
+      return { success: true };
+    } catch (err) {
+      console.error("Error in fecharCaixa:", err);
+      throw err;
+    }
+  },
+
+  getRelatorioFechamento: (sessaoId) => {
+    if (db.isJson) {
+      const s = db._data.caixa_sessoes.find(sess => sess.id === sessaoId);
+      if (!s) return null;
+      const u = db._data.usuarios.find(user => user.id === s.usuario_id);
+      
+      const filterSales = db._data.vendas.filter(v => v.sessao_id === sessaoId);
+      const sumPay = (type) => filterSales.filter(v => v.forma_pagamento === type).reduce((acc, v) => acc + v.total, 0);
+      
+      const totalDinheiro = sumPay('dinheiro');
+      const totalPix = sumPay('pix');
+      const totalDebito = sumPay('debito');
+      const totalCredito = sumPay('credito');
+      const totalFiado = sumPay('fiado');
+      
+      const movs = db._data.caixa_movimentacoes ? db._data.caixa_movimentacoes.filter(m => m.sessao_id === sessaoId) : [];
+      
+      return {
+        sessao: { ...s, operador_nome: u ? u.name : 'Desconhecido' },
+        vendas: {
+          dinheiro: totalDinheiro,
+          pix: totalPix,
+          debito: totalDebito,
+          credito: totalCredito,
+          fiado: totalFiado,
+          total: totalDinheiro + totalPix + totalDebito + totalCredito + totalFiado
+        },
+        movimentacoes: movs
+      };
+    }
+    try {
+      const sessao = db.prepare("SELECT s.*, u.name as operador_nome FROM caixa_sessoes s JOIN usuarios u ON s.usuario_id = u.id WHERE s.id = ?").get(sessaoId);
+      if (!sessao) return null;
+      
+      const totalDinheiro = db.prepare("SELECT SUM(total) as sum FROM vendas WHERE sessao_id = ? AND forma_pagamento = 'dinheiro'").get(sessaoId).sum || 0;
+      const totalPix = db.prepare("SELECT SUM(total) as sum FROM vendas WHERE sessao_id = ? AND forma_pagamento = 'pix'").get(sessaoId).sum || 0;
+      const totalDebito = db.prepare("SELECT SUM(total) as sum FROM vendas WHERE sessao_id = ? AND forma_pagamento = 'debito'").get(sessaoId).sum || 0;
+      const totalCredito = db.prepare("SELECT SUM(total) as sum FROM vendas WHERE sessao_id = ? AND forma_pagamento = 'credito'").get(sessaoId).sum || 0;
+      const totalFiado = db.prepare("SELECT SUM(total) as sum FROM vendas WHERE sessao_id = ? AND forma_pagamento = 'fiado'").get(sessaoId).sum || 0;
+      
+      const movs = db.prepare("SELECT * FROM caixa_movimentacoes WHERE sessao_id = ? ORDER BY id ASC").all(sessaoId);
+      
+      return {
+        sessao,
+        vendas: {
+          dinheiro: totalDinheiro,
+          pix: totalPix,
+          debito: totalDebito,
+          credito: totalCredito,
+          fiado: totalFiado,
+          total: totalDinheiro + totalPix + totalDebito + totalCredito + totalFiado
+        },
+        movimentacoes: movs
+      };
+    } catch (err) {
+      console.error("Error in getRelatorioFechamento:", err);
+      return null;
+    }
+  },
+
+  getHistoricoCaixas: () => {
+    if (db.isJson) {
+      if (!db._data.caixa_sessoes) return [];
+      return [...db._data.caixa_sessoes].map(s => {
+        const u = db._data.usuarios.find(user => user.id === s.usuario_id);
+        return { ...s, operador_nome: u ? u.name : 'Desconhecido' };
+      }).reverse();
+    }
+    try {
+      return db.prepare(`
+        SELECT s.*, u.name as operador_nome
+        FROM caixa_sessoes s
+        JOIN usuarios u ON s.usuario_id = u.id
+        ORDER BY s.id DESC
+      `).all();
+    } catch (err) {
+      console.error("Error in getHistoricoCaixas:", err);
+      return [];
+    }
   }
 };
 
