@@ -207,6 +207,94 @@ app.whenReady().then(() => {
       };
     }
 
+    const isTcp = porta && (porta.includes('.') || porta.includes(':') || porta.toLowerCase().startsWith('tcp:'));
+
+    if (isTcp) {
+      const net = require('net');
+      return new Promise((resolve) => {
+        let client;
+        let timeoutId;
+        let resolved = false;
+
+        const cleanPorta = porta.toLowerCase().startsWith('tcp:') ? porta.substring(4) : porta;
+        const parts = cleanPorta.split(':');
+        const host = parts[0];
+        const port = parts[1] ? parseInt(parts[1], 10) : 1001; // default TCP port for scale servers
+
+        const finish = (result) => {
+          if (resolved) return;
+          resolved = true;
+          if (timeoutId) clearTimeout(timeoutId);
+          if (client) client.destroy();
+          resolve(result);
+        };
+
+        // Timeout fallback after 1.5 seconds
+        timeoutId = setTimeout(() => {
+          const base = 1.450;
+          const fluctuation = parseFloat((Math.sin(Date.now() / 800) * 0.25).toFixed(3));
+          const weight = parseFloat((base + fluctuation).toFixed(3));
+          finish({
+            sucesso: true,
+            peso: weight,
+            simulado: true,
+            porta: `${host}:${port} (Simulada - Timeout)`,
+            mensagem: 'Balança TCP não respondeu no tempo limite. Retornando peso simulado.'
+          });
+        }, 1500);
+
+        try {
+          client = net.createConnection({ host, port }, () => {
+            // Send ENQ command (0x05) to trigger reading (demand mode)
+            client.write(Buffer.from([0x05]));
+          });
+
+          // Buffer for incoming data
+          let dataBuffer = Buffer.alloc(0);
+
+          client.on('data', (chunk) => {
+            dataBuffer = Buffer.concat([dataBuffer, chunk]);
+            const parsedWeight = parseSerialWeight(dataBuffer, protocolo);
+            if (parsedWeight !== null) {
+              finish({
+                sucesso: true,
+                peso: parsedWeight,
+                simulado: false,
+                porta: `${host}:${port}`,
+                mensagem: 'Peso lido com sucesso da balança TCP física.'
+              });
+            }
+          });
+
+          client.on('error', (err) => {
+            console.error("TCP Scale connection error:", err.message);
+            const base = 1.450;
+            const fluctuation = parseFloat((Math.sin(Date.now() / 800) * 0.25).toFixed(3));
+            const weight = parseFloat((base + fluctuation).toFixed(3));
+            finish({
+              sucesso: true,
+              peso: weight,
+              simulado: true,
+              porta: `${host}:${port} (Simulada - Erro de Conexão)`,
+              mensagem: `Erro na balança TCP: ${err.message}. Usando simulação.`
+            });
+          });
+        } catch (err) {
+          console.error("Failed to execute TCP scale routine:", err.message);
+          const base = 1.450;
+          const fluctuation = parseFloat((Math.sin(Date.now() / 800) * 0.25).toFixed(3));
+          const weight = parseFloat((base + fluctuation).toFixed(3));
+          finish({
+            sucesso: true,
+            peso: weight,
+            simulado: true,
+            porta: `${porta} (Simulada - Exceção)`,
+            mensagem: `Exceção de rede: ${err.message}. Usando simulação.`
+          });
+        }
+      });
+    }
+
     // Physical Scale logic with serialport
     let SerialPort;
     try {

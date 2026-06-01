@@ -37,7 +37,6 @@ export default function Config() {
       setLicSuccessMsg('');
     }
   };
-
   const [settings, setSettings] = useState({
     chavePix: '',
     beneficiario: '',
@@ -58,12 +57,22 @@ export default function Config() {
     repassarTaxaCredito: false
   });
   const [showToast, setShowToast] = useState(false);
+  const [tipoConexao, setTipoConexao] = useState('SIMULACAO');
 
   useEffect(() => {
     const saved = localStorage.getItem('pdv_settings');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        const porta = parsed.balancaPorta || 'SIMULACAO';
+        let conexao = 'SIMULACAO';
+        if (porta.startsWith('COM')) {
+          conexao = 'SERIAL';
+        } else if (porta !== 'SIMULACAO' && (porta.includes('.') || porta.includes(':') || porta.toLowerCase().startsWith('tcp:'))) {
+          conexao = 'REDE';
+        }
+        setTipoConexao(conexao);
+
         setSettings({
           chavePix: parsed.chavePix || '',
           beneficiario: parsed.beneficiario || '',
@@ -88,6 +97,22 @@ export default function Config() {
       }
     }
   }, []);
+
+  const handleTipoConexaoChange = (tipo) => {
+    setTipoConexao(tipo);
+    if (tipo === 'SIMULACAO') {
+      setSettings(prev => ({ ...prev, balancaPorta: 'SIMULACAO' }));
+    } else if (tipo === 'SERIAL') {
+      const defaultPort = settings.balancaPorta.startsWith('COM') ? settings.balancaPorta : 'COM1';
+      setSettings(prev => ({ ...prev, balancaPorta: defaultPort }));
+    } else if (tipo === 'REDE') {
+      const hasNetFormat = settings.balancaPorta && (settings.balancaPorta.includes('.') || settings.balancaPorta.includes(':'));
+      const defaultIp = hasNetFormat && settings.balancaPorta !== 'SIMULACAO' && !settings.balancaPorta.startsWith('COM')
+        ? settings.balancaPorta
+        : '192.168.1.250:1001';
+      setSettings(prev => ({ ...prev, balancaPorta: defaultIp }));
+    }
+  };
 
   const handleSave = (e) => {
     e.preventDefault();
@@ -268,8 +293,8 @@ export default function Config() {
           <div className="flex items-center space-x-3 pb-4 border-b border-brand-border/50">
             <Scale className="text-brand-accent h-5 w-5" />
             <div>
-              <h3 className="text-sm font-extrabold text-white uppercase tracking-wider">Balança de Checkout</h3>
-              <p className="text-xs text-gray-500 font-semibold">Integre balanças seriais (COM/USB) para pesagem automática na Frente de Caixa</p>
+              <h3 className="text-sm font-extrabold text-white uppercase tracking-wider">Balança de Checkout & Integração Wi-Fi</h3>
+              <p className="text-xs text-gray-500 font-semibold">Integre balanças seriais (COM/USB) ou balanças de rede sem fio (Wi-Fi/Ethernet TCP) na Frente de Caixa</p>
             </div>
           </div>
 
@@ -291,31 +316,72 @@ export default function Config() {
               <p className="text-[10px] text-gray-500 font-medium mt-1">Habilita leitura de peso no PDV.</p>
             </div>
 
-            {/* Porta Serial */}
+            {/* Tipo de Conexão */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-400 uppercase">Porta COM (Serial)</label>
+              <label className="text-xs font-bold text-gray-400 uppercase">Tipo de Conexão</label>
               <select
                 disabled={!settings.balancaAtiva}
-                value={settings.balancaPorta}
-                onChange={(e) => setSettings({ ...settings, balancaPorta: e.target.value })}
+                value={tipoConexao}
+                onChange={(e) => handleTipoConexaoChange(e.target.value)}
                 className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent disabled:opacity-40 disabled:cursor-not-allowed rounded-xl py-3 px-4 text-xs font-semibold text-gray-300 outline-none transition-all"
               >
-                <option value="SIMULACAO">SIMULAÇÃO (Sem Cabo)</option>
-                <option value="COM1">Porta COM1</option>
-                <option value="COM2">Porta COM2</option>
-                <option value="COM3">Porta COM3</option>
-                <option value="COM4">Porta COM4</option>
-                <option value="COM5">Porta COM5</option>
-                <option value="COM6">Porta COM6</option>
-                <option value="COM7">Porta COM7</option>
-                <option value="COM8">Porta COM8</option>
+                <option value="SIMULACAO">Simulação de Peso (Sem Cabo)</option>
+                <option value="SERIAL">Cabo Serial Físico (Porta COM)</option>
+                <option value="REDE">Rede Sem Fio Wi-Fi / Ethernet (TCP/IP)</option>
               </select>
-              <p className="text-[10px] text-gray-500 font-medium">Porta onde o cabo da balança está conectado.</p>
+              <p className="text-[10px] text-gray-500 font-medium">Modo de comunicação da balança.</p>
             </div>
+
+            {/* Porta COM ou IP/Porta */}
+            {tipoConexao === 'SERIAL' ? (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-400 uppercase">Porta COM (Serial)</label>
+                <select
+                  disabled={!settings.balancaAtiva}
+                  value={settings.balancaPorta}
+                  onChange={(e) => setSettings({ ...settings, balancaPorta: e.target.value })}
+                  className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent disabled:opacity-40 disabled:cursor-not-allowed rounded-xl py-3 px-4 text-xs font-semibold text-gray-300 outline-none transition-all"
+                >
+                  <option value="COM1">Porta COM1</option>
+                  <option value="COM2">Porta COM2</option>
+                  <option value="COM3">Porta COM3</option>
+                  <option value="COM4">Porta COM4</option>
+                  <option value="COM5">Porta COM5</option>
+                  <option value="COM6">Porta COM6</option>
+                  <option value="COM7">Porta COM7</option>
+                  <option value="COM8">Porta COM8</option>
+                </select>
+                <p className="text-[10px] text-gray-500 font-medium">Porta onde a balança serial está conectada.</p>
+              </div>
+            ) : tipoConexao === 'REDE' ? (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-400 uppercase">Endereço IP e Porta (TCP/IP)</label>
+                <input
+                  disabled={!settings.balancaAtiva}
+                  type="text"
+                  placeholder="Ex: 192.168.1.250:1001"
+                  value={settings.balancaPorta}
+                  onChange={(e) => setSettings({ ...settings, balancaPorta: e.target.value })}
+                  className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent disabled:opacity-40 disabled:cursor-not-allowed rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none transition-all shadow-inner"
+                />
+                <p className="text-[10px] text-gray-500 font-medium">IP e Porta do conversor/balança Wi-Fi.</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5 opacity-40">
+                <label className="text-xs font-bold text-gray-400 uppercase">Porta / Endereço</label>
+                <input
+                  disabled
+                  type="text"
+                  value="SIMULAÇÃO ATIVA"
+                  className="w-full bg-brand-dark border border-brand-border rounded-xl py-3 px-4 text-xs font-semibold text-gray-500 outline-none cursor-not-allowed"
+                />
+                <p className="text-[10px] text-gray-500 font-medium">Nenhuma conexão física necessária.</p>
+              </div>
+            )}
 
             {/* Protocolo */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-400 uppercase">Protocolo</label>
+              <label className="text-xs font-bold text-gray-400 uppercase">Protocolo (Checkout)</label>
               <select
                 disabled={!settings.balancaAtiva}
                 value={settings.balancaProtocolo}
@@ -326,24 +392,78 @@ export default function Config() {
                 <option value="Filizola">Filizola (BP / Platina)</option>
                 <option value="Urano">Urano (POP / POP-S)</option>
               </select>
-              <p className="text-[10px] text-gray-500 font-medium">Protocolo de comunicação da balança.</p>
+              <p className="text-[10px] text-gray-500 font-medium">Protocolo de pesagem de checkout.</p>
             </div>
+          </div>
 
-            {/* Peso Simulado */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-400 uppercase">Peso Simulado (KG)</label>
-              <input
-                disabled={!settings.balancaAtiva || settings.balancaPorta !== 'SIMULACAO'}
-                type="number"
-                step="0.001"
-                min="0.000"
-                max="30.000"
-                placeholder="Ex: 1.500"
-                value={settings.balancaPesoSimulado}
-                onChange={(e) => setSettings({ ...settings, balancaPesoSimulado: e.target.value })}
-                className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent disabled:opacity-40 disabled:cursor-not-allowed rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none transition-all shadow-inner"
-              />
-              <p className="text-[10px] text-gray-500 font-medium">Para testes rápidos de venda sem balança física.</p>
+          {/* Peso Simulado e Guia Toledo */}
+          {settings.balancaAtiva && tipoConexao === 'SIMULACAO' && (
+            <div className="pt-2 max-w-xs">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-400 uppercase">Peso Simulado (KG)</label>
+                <input
+                  type="number"
+                  step="0.001"
+                  min="0.000"
+                  max="30.000"
+                  placeholder="Ex: 1.500"
+                  value={settings.balancaPesoSimulado}
+                  onChange={(e) => setSettings({ ...settings, balancaPesoSimulado: e.target.value })}
+                  className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none transition-all shadow-inner"
+                />
+                <p className="text-[10px] text-gray-500 font-medium">Para testes rápidos de venda sem balança física.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Guia Avançado de Balanças Wi-Fi Toledo Prix (Cenários A & B) */}
+          <div className="border-t border-brand-border/40 pt-6">
+            <h4 className="text-xs font-extrabold text-white uppercase tracking-wider mb-4 flex items-center space-x-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-accent animate-pulse" />
+              <span>Guia de Integração Wi-Fi Toledo Prix (Cenários A & B)</span>
+            </h4>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Cenário A */}
+              <div className="bg-brand-dark/30 border border-brand-border/20 rounded-2xl p-5 space-y-3 relative hover:border-brand-accent/20 transition-all duration-300">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-2.5 py-1 rounded-lg">Cenário A</span>
+                  <QrCode size={16} className="text-indigo-400" />
+                </div>
+                <h5 className="text-xs font-bold text-white uppercase tracking-wider">Balança de Etiquetas (Prix 4/5/6)</h5>
+                <p className="text-[11px] text-gray-400 leading-relaxed font-medium">
+                  A pesagem ocorre **fora do caixa** (ex: Padaria, Açougue). A balança gera uma etiqueta com código de barras EAN-13 iniciando com o dígito <strong className="text-indigo-300">2</strong> contendo o PLU e o peso ou valor total do item.
+                </p>
+                <div className="text-[10px] text-gray-500 font-semibold space-y-2.5 bg-brand-dark/40 p-4 rounded-xl border border-white/5">
+                  <p className="text-white/80 font-bold uppercase tracking-wider flex items-center space-x-1.5">
+                    <span className="h-1 w-1 bg-indigo-400 rounded-full" />
+                    <span>Como configurar no MercadoPDV:</span>
+                  </p>
+                  <p>1. Cadastre o produto por peso (KG) usando como código de barras apenas o número do **PLU** (ex: se o PLU na balança for <strong className="text-indigo-300">5</strong> ou <strong className="text-indigo-300">000005</strong>, cadastre no sistema como <strong className="text-indigo-300">5</strong>).</p>
+                  <p>2. Ao bipar a etiqueta impressa pela Prix no caixa, o sistema decodifica o peso/valor e lança o item automaticamente.</p>
+                </div>
+              </div>
+
+              {/* Cenário B */}
+              <div className="bg-brand-dark/30 border border-brand-border/20 rounded-2xl p-5 space-y-3 relative hover:border-brand-accent/20 transition-all duration-300">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-2.5 py-1 rounded-lg">Cenário B</span>
+                  <Scale size={16} className="text-emerald-400" />
+                </div>
+                <h5 className="text-xs font-bold text-white uppercase tracking-wider">Balança de Checkout (Prix 3 / Rede TCP)</h5>
+                <p className="text-[11px] text-gray-400 leading-relaxed font-medium">
+                  O produto é pesado **no próprio caixa**. Ao lançar o item KG no PDV, o sistema consulta a balança física em tempo real através da rede local Wi-Fi ou cabo TCP.
+                </p>
+                <div className="text-[10px] text-gray-500 font-semibold space-y-2.5 bg-brand-dark/40 p-4 rounded-xl border border-white/5">
+                  <p className="text-white/80 font-bold uppercase tracking-wider flex items-center space-x-1.5">
+                    <span className="h-1 w-1 bg-emerald-400 rounded-full" />
+                    <span>Como configurar no MercadoPDV:</span>
+                  </p>
+                  <p>1. Marque <strong className="text-emerald-300">Ativar Balança</strong> acima.</p>
+                  <p>2. Selecione <strong className="text-emerald-300">Rede Sem Fio Wi-Fi / Ethernet</strong> e insira o IP e Porta do conversor serial-rede da Prix (ex: <strong className="text-emerald-300">192.168.1.250:1001</strong>).</p>
+                  <p>3. O sistema requisitará o peso automaticamente nos itens de balança no caixa.</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

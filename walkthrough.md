@@ -69,11 +69,17 @@ Durante o desenvolvimento e migração do banco de dados na versão **1.0.4**, i
 *   **Solução:**
     1. **Nulidade Transacional:** Atualizamos a lógica em `excluirProduto` (`database.js`). Agora, antes de deletar o produto da tabela `produtos`, o sistema define dinamicamente `produto_id = NULL` em todas as linhas correspondentes da tabela `itens_venda` dentro de uma transação SQLite segura.
     2. **Resiliência nos Relatórios e Históricos:** Ajustamos a API `getVendaDetalhes` para mapear os itens vendidos. Se um produto for excluído (`produto_id` nulo), o sistema renderiza automaticamente `'Produto Excluído'` no nome do produto e `'N/A'` no código de barras, impedindo falhas na tela de relatórios ou impressão de cupons.
-    3. **Resiliência no Dashboard:** Atualizamos a query de cálculo de lucro real em `getDashboardStats` para usar `LEFT JOIN` com `COALESCE(p.preco_custo, 0)`. Isso garante que as vendas históricas de produtos excluídos ainda sejam computadas perfeitamente no faturamento e lucro total exibidos.
+    3. **Resiliência no Dashboard:** Atualizamos a query de cálculo de lucro real in `getDashboardStats` para usar `LEFT JOIN` com `COALESCE(p.preco_custo, 0)`. Isso garante que as vendas históricas de produtos excluídos ainda sejam computadas perfeitamente no faturamento e lucro total exibidos.
+
+### 3. ⚖️ Integração Avançada de Balanças Toledo Prix Wi-Fi (Cenários A e B)
+*   **Renovação UI/UX de Configuração (`Config.jsx`):** O painel de configurações de balança foi completamente remodelado. Introduzimos um seletor dinâmico de **Tipo de Conexão** com três opções: *Simulação*, *Porta Serial (COM)* e *Rede Sem Fio Wi-Fi / Ethernet (TCP/IP)*. Se Rede for selecionada, exibe-se um campo de texto inteligente para inserção do IP e Porta do conversor de rede da balança (ex: `192.168.1.250:1001`), perfeitamente compatível com o banco de dados.
+*   **Driver TCP Socket Nativo (`main.js`):** O handler IPC `balanca:lerPeso` agora realiza auto-detecção: se a porta configurada contiver formatos de endereço IP (ex. `.` ou `:`), ele desvia do SerialPort e abre um canal TCP direto via `net.createConnection`. Envia o byte `0x05` (ENQ), lê a resposta contendo a pesagem e a decodifica de forma assíncrona.
+*   **Mecanismo de Resiliência no Caixa (Failsafe):** Para impedir que falhas de rede local ou balanças desligadas travem a tela de vendas do operador, o driver de rede opera com um **timeout de 1,5 segundos**. Se excedido, ele entra em contingência automática, fornecendo o peso de simulação/manual e informando o operador sobre a indisponibilidade temporária.
+*   **Guia Rápido Glassmorphic na Interface:** Adicionado um card explicativo duplo de alta fidelidade visual que ensina passo-a-passo como configurar e cadastrar produtos para o **Cenário A (Pesagem Externa com Etiqueta EAN-13 iniciando com 2)** e o **Cenário B (Pesagem Direta no Caixa via IP/Porta TCP)**, instruindo o lojista de forma clara.
 
 ---
 
-## 📦 Detalhes de Instalação e Distribuição (v1.0.4 - Hotfix)
+## 📦 Detalhes de Instalação e Distribuição (v1.0.4 - Hotfix & Balanças)
 
 *   **Instalador de Produção Compilado:**
     *   [MercadoPDV Setup 1.0.4.exe](file:///C:/Users/Felipe%20Gondim/MecadoPDV/release/MercadoPDV%20Setup%201.0.4.exe)
