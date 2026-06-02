@@ -102,10 +102,17 @@ export default function PDV() {
 
   // Checkout states
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('dinheiro'); // dinheiro, pix, debito, credito, fiado
+  const [paymentMethod, setPaymentMethod] = useState('dinheiro'); // dinheiro, pix, debito, credito, fiado, misto
   const [cashPaid, setCashPaid] = useState('');
   const [change, setChange] = useState(0);
   const [pixQrCodeUrl, setPixQrCodeUrl] = useState('');
+  const [mistoValues, setMistoValues] = useState({
+    dinheiro: '',
+    pix: '',
+    debito: '',
+    credito: '',
+    fiado: ''
+  });
   const [pixSettings, setPixSettings] = useState({
     chavePix: '12345678909',
     beneficiario: 'CONVENIENCIA OFF',
@@ -789,6 +796,13 @@ export default function PDV() {
     setSelectedClientId('');
     setSelectedClient(null);
     setClientSearchText('');
+    setMistoValues({
+      dinheiro: '',
+      pix: '',
+      debito: '',
+      credito: '',
+      fiado: ''
+    });
     setShowPaymentModal(true);
   };
 
@@ -806,7 +820,60 @@ export default function PDV() {
   const handleFinalizeSale = async () => {
     if (items.length === 0) return;
 
-    if (paymentMethod === 'fiado') {
+    let finalSplits = [];
+    let mistoTroco = 0;
+    let sumMisto = 0;
+
+    if (paymentMethod === 'misto') {
+      const dinheiro = parseFloat(mistoValues.dinheiro || 0);
+      const pix = parseFloat(mistoValues.pix || 0);
+      const debito = parseFloat(mistoValues.debito || 0);
+      const credito = parseFloat(mistoValues.credito || 0);
+      const fiado = parseFloat(mistoValues.fiado || 0);
+
+      sumMisto = dinheiro + pix + debito + credito + fiado;
+      const mistoRestante = total - sumMisto;
+
+      if (parseFloat(mistoRestante.toFixed(2)) > 0) {
+        playBeep('error');
+        showAlert(`Ainda resta R$ ${mistoRestante.toFixed(2)} a ser pago.`);
+        return;
+      }
+
+      if (parseFloat((sumMisto - total).toFixed(2)) > 0) {
+        if (dinheiro <= 0 || parseFloat((sumMisto - total).toFixed(2)) > dinheiro) {
+          playBeep('error');
+          showAlert("O valor pago excede o total da venda. Apenas pagamentos em dinheiro podem gerar troco.");
+          return;
+        }
+        mistoTroco = parseFloat((sumMisto - total).toFixed(2));
+      }
+
+      if (fiado > 0) {
+        if (!selectedClientId) {
+          playBeep('error');
+          showAlert("Por favor, selecione um cliente para a parcela em Fiado.");
+          return;
+        }
+        const client = clients.find(c => c.id === parseInt(selectedClientId, 10));
+        if (client) {
+          const totalComDebito = (client.saldo_devedor || 0) + fiado;
+          if (client.limite_credito > 0 && totalComDebito > client.limite_credito) {
+            playBeep('error');
+            showAlert(`A parcela em Fiado de R$ ${fiado.toFixed(2)} ultrapassa o limite de crédito do cliente ${client.nome}!\n\nLimite: R$ ${client.limite_credito.toFixed(2)}\nSaldo Devedor Atual: R$ ${(client.saldo_devedor || 0).toFixed(2)}\nTotal Acumulado: R$ ${totalComDebito.toFixed(2)}`);
+            return;
+          }
+        }
+      }
+
+      finalSplits = [
+        { metodo: 'dinheiro', valor: parseFloat((dinheiro - mistoTroco).toFixed(2)) },
+        { metodo: 'pix', valor: pix },
+        { metodo: 'debito', valor: debito },
+        { metodo: 'credito', valor: credito },
+        { metodo: 'fiado', valor: fiado }
+      ].filter(s => s.valor > 0);
+    } else if (paymentMethod === 'fiado') {
       if (!selectedClientId) {
         playBeep('error');
         showAlert("Por favor, selecione um cliente para realizar a venda fiada.");
@@ -833,9 +900,10 @@ export default function PDV() {
       desconto: discount,
       subtotal,
       forma_pagamento: paymentMethod,
-      troco: paymentMethod === 'dinheiro' ? change : 0,
-      pago: paymentMethod === 'dinheiro' ? parseFloat(cashPaid || saleFinalTotal) : saleFinalTotal,
-      cliente_id: paymentMethod === 'fiado' && selectedClientId ? parseInt(selectedClientId, 10) : null
+      split: paymentMethod === 'misto' ? finalSplits : null,
+      troco: paymentMethod === 'misto' ? mistoTroco : (paymentMethod === 'dinheiro' ? change : 0),
+      pago: paymentMethod === 'misto' ? sumMisto : (paymentMethod === 'dinheiro' ? parseFloat(cashPaid || saleFinalTotal) : saleFinalTotal),
+      cliente_id: (paymentMethod === 'fiado' || (paymentMethod === 'misto' && parseFloat(mistoValues.fiado || 0) > 0)) && selectedClientId ? parseInt(selectedClientId, 10) : null
     };
 
     const itemsPayload = items.map(item => ({
@@ -923,33 +991,71 @@ export default function PDV() {
               <span>R$ ${saleFinalTotal.toFixed(2)}</span>
             </div>
             <div class="divider"></div>
-            <div class="row">
-              <span>F. Pagamento:</span>
-              <span class="bold">${paymentMethod === 'fiado' ? 'FIADO (A PRAZO)' : paymentMethod.toUpperCase()}</span>
-            </div>
-            ${paymentMethod === 'fiado' && selectedClientId ? (() => {
-              const client = clients.find(c => c.id === parseInt(selectedClientId, 10));
-              return client ? `
+            
+            ${paymentMethod === 'misto' ? `
+              <div class="row">
+                <span>F. Pagamento:</span>
+                <span class="bold">MISTO / DIVIDIDO</span>
+              </div>
+              ${finalSplits.map(s => {
+                const isFiado = s.metodo === 'fiado';
+                const label = isFiado ? 'FIADO (A PRAZO)' : s.metodo.toUpperCase();
+                const displayVal = s.metodo === 'dinheiro' ? s.valor + mistoTroco : s.valor;
+                return `
+                  <div class="row">
+                    <span>&nbsp;&nbsp;PAGO EM ${label}:</span>
+                    <span>R$ ${displayVal.toFixed(2)}</span>
+                  </div>
+                `;
+              }).join('')}
+              ${parseFloat(mistoValues.fiado || 0) > 0 && selectedClientId ? (() => {
+                const client = clients.find(c => c.id === parseInt(selectedClientId, 10));
+                return client ? `
+                  <div class="row">
+                    <span>&nbsp;&nbsp;Cliente Fiado:</span>
+                    <span class="bold">${client.nome.toUpperCase()}</span>
+                  </div>
+                  <div class="row">
+                    <span>&nbsp;&nbsp;Divida Acumulada:</span>
+                    <span class="bold">R$ ${((client.saldo_devedor || 0) + parseFloat(mistoValues.fiado)).toFixed(2)}</span>
+                  </div>
+                ` : '';
+              })() : ''}
+              ${mistoTroco > 0 ? `
                 <div class="row">
-                  <span>Cliente:</span>
-                  <span class="bold">${client.nome.toUpperCase()}</span>
+                  <span>Troco Dinheiro:</span>
+                  <span>R$ ${mistoTroco.toFixed(2)}</span>
+                </div>
+              ` : ''}
+            ` : `
+              <div class="row">
+                <span>F. Pagamento:</span>
+                <span class="bold">${paymentMethod === 'fiado' ? 'FIADO (A PRAZO)' : paymentMethod.toUpperCase()}</span>
+              </div>
+              ${paymentMethod === 'fiado' && selectedClientId ? (() => {
+                const client = clients.find(c => c.id === parseInt(selectedClientId, 10));
+                return client ? `
+                  <div class="row">
+                    <span>Cliente:</span>
+                    <span class="bold">${client.nome.toUpperCase()}</span>
+                  </div>
+                  <div class="row">
+                    <span>Divida Acumulada:</span>
+                    <span class="bold">R$ ${((client.saldo_devedor || 0) + saleFinalTotal).toFixed(2)}</span>
+                  </div>
+                ` : '';
+              })() : ''}
+              ${paymentMethod === 'dinheiro' ? `
+                <div class="row">
+                  <span>Valor Pago:</span>
+                  <span>R$ ${parseFloat(cashPaid || saleFinalTotal).toFixed(2)}</span>
                 </div>
                 <div class="row">
-                  <span>Divida Acumulada:</span>
-                  <span class="bold">R$ ${((client.saldo_devedor || 0) + saleFinalTotal).toFixed(2)}</span>
+                  <span>Troco:</span>
+                  <span>R$ ${change.toFixed(2)}</span>
                 </div>
-              ` : '';
-            })() : ''}
-            ${paymentMethod === 'dinheiro' ? `
-              <div class="row">
-                <span>Valor Pago:</span>
-                <span>R$ ${parseFloat(cashPaid || saleFinalTotal).toFixed(2)}</span>
-              </div>
-              <div class="row">
-                <span>Troco:</span>
-                <span>R$ ${change.toFixed(2)}</span>
-              </div>
-            ` : ''}
+              ` : ''}
+            `}
             
             <div class="divider"></div>
             <div class="text-center" style="margin-top:10px;">
@@ -1377,16 +1483,29 @@ export default function PDV() {
 
                   <button
                     onClick={() => setPaymentMethod('fiado')}
-                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all col-span-2 ${
+                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
                       paymentMethod === 'fiado'
                         ? 'border-brand-accent bg-brand-accent/10 text-white'
                         : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
                     }`}
                   >
-                    <div className="flex items-center space-x-2">
-                      <User size={18} className={paymentMethod === 'fiado' ? 'text-brand-accent' : 'text-gray-400'} />
-                      <span className="text-xs font-bold uppercase">Venda Fiada / Prazo</span>
+                    <User size={24} className="mb-2" />
+                    <span className="text-xs font-bold uppercase">Fiado / Prazo</span>
+                  </button>
+
+                  <button
+                    onClick={() => setPaymentMethod('misto')}
+                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
+                      paymentMethod === 'misto'
+                        ? 'border-brand-accent bg-brand-accent/10 text-white'
+                        : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-1.5 justify-center mb-2">
+                      <DollarSign size={18} className="text-brand-accent" />
+                      <QrCode size={18} className="text-brand-success" />
                     </div>
+                    <span className="text-xs font-bold uppercase">Misto Dividido</span>
                   </button>
                 </div>
               </div>
@@ -1504,6 +1623,156 @@ export default function PDV() {
                           </p>
                         </div>
                       )}
+
+                      {/* Misto / Dividido Option */}
+                      {paymentMethod === 'misto' && (() => {
+                        const dinheiro = parseFloat(mistoValues.dinheiro || 0);
+                        const pix = parseFloat(mistoValues.pix || 0);
+                        const debito = parseFloat(mistoValues.debito || 0);
+                        const credito = parseFloat(mistoValues.credito || 0);
+                        const fiado = parseFloat(mistoValues.fiado || 0);
+                        const sum = dinheiro + pix + debito + credito + fiado;
+                        const rest = total - sum;
+                        const hasCash = dinheiro > 0;
+                        const changeVal = sum > total && hasCash ? parseFloat((sum - total).toFixed(2)) : 0;
+
+                        return (
+                          <div className="space-y-4 text-left animate-in fade-in duration-200">
+                            <span className="text-[10px] text-gray-500 font-extrabold uppercase tracking-widest block mb-1 text-brand-accent">Valores da Divisão</span>
+                            
+                            <div className="space-y-2">
+                              {/* Dinheiro Input */}
+                              <div className="flex items-center space-x-2 bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
+                                <DollarSign size={14} className="text-emerald-400 shrink-0" />
+                                <span className="text-xs text-gray-400 font-bold uppercase w-16">Dinheiro</span>
+                                <input
+                                  type="number"
+                                  placeholder="0,00"
+                                  value={mistoValues.dinheiro}
+                                  onChange={(e) => setMistoValues({ ...mistoValues, dinheiro: e.target.value })}
+                                  className="w-full bg-transparent text-right text-sm font-bold text-white outline-none"
+                                />
+                              </div>
+
+                              {/* PIX Input */}
+                              <div className="flex items-center space-x-2 bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
+                                <QrCode size={14} className="text-brand-success shrink-0" />
+                                <span className="text-xs text-gray-400 font-bold uppercase w-16">PIX</span>
+                                <input
+                                  type="number"
+                                  placeholder="0,00"
+                                  value={mistoValues.pix}
+                                  onChange={(e) => setMistoValues({ ...mistoValues, pix: e.target.value })}
+                                  className="w-full bg-transparent text-right text-sm font-bold text-white outline-none"
+                                />
+                              </div>
+
+                              {/* Debito Input */}
+                              <div className="flex items-center space-x-2 bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
+                                <CreditCard size={14} className="text-brand-accent shrink-0" />
+                                <span className="text-xs text-gray-400 font-bold uppercase w-16">Débito</span>
+                                <input
+                                  type="number"
+                                  placeholder="0,00"
+                                  value={mistoValues.debito}
+                                  onChange={(e) => setMistoValues({ ...mistoValues, debito: e.target.value })}
+                                  className="w-full bg-transparent text-right text-sm font-bold text-white outline-none"
+                                />
+                              </div>
+
+                              {/* Credito Input */}
+                              <div className="flex items-center space-x-2 bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
+                                <CreditCard size={14} className="text-indigo-400 shrink-0" />
+                                <span className="text-xs text-gray-400 font-bold uppercase w-16">Crédito</span>
+                                <input
+                                  type="number"
+                                  placeholder="0,00"
+                                  value={mistoValues.credito}
+                                  onChange={(e) => setMistoValues({ ...mistoValues, credito: e.target.value })}
+                                  className="w-full bg-transparent text-right text-sm font-bold text-white outline-none"
+                                />
+                              </div>
+
+                              {/* Fiado Input */}
+                              <div className="flex items-center space-x-2 bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
+                                <User size={14} className="text-amber-400 shrink-0" />
+                                <span className="text-xs text-gray-400 font-bold uppercase w-16">Fiado</span>
+                                <input
+                                  type="number"
+                                  placeholder="0,00"
+                                  value={mistoValues.fiado}
+                                  onChange={(e) => setMistoValues({ ...mistoValues, fiado: e.target.value })}
+                                  className="w-full bg-transparent text-right text-sm font-bold text-white outline-none"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Client select for mixed fiado */}
+                            {fiado > 0 && (
+                              <div className="p-3.5 bg-brand-dark/40 border border-brand-border/60 rounded-xl space-y-2 animate-in slide-in-from-top-2 duration-200">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase block">Selecionar Cliente p/ Fiado</label>
+                                <select
+                                  value={selectedClientId}
+                                  onChange={(e) => {
+                                    const cId = e.target.value;
+                                    setSelectedClientId(cId);
+                                    if (cId) {
+                                      const cObj = clients.find(c => c.id === parseInt(cId, 10));
+                                      setSelectedClient(cObj);
+                                    } else {
+                                      setSelectedClient(null);
+                                    }
+                                  }}
+                                  className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-2 px-2.5 text-xs font-bold text-white outline-none"
+                                >
+                                  <option value="">-- Escolha o Cliente --</option>
+                                  {clients.map(c => (
+                                    <option key={c.id} value={c.id}>{c.nome}</option>
+                                  ))}
+                                </select>
+                                {selectedClient && (
+                                  <div className="text-[10px] text-gray-500 space-y-1 font-semibold border-t border-brand-border/30 pt-1.5 mt-1.5">
+                                    <div className="flex justify-between">
+                                      <span>Dívida Atual:</span>
+                                      <span className="text-brand-warning">R$ {(selectedClient.saldo_devedor || 0).toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span>Limite:</span>
+                                      <span>{selectedClient.limite_credito > 0 ? `R$ ${selectedClient.limite_credito.toFixed(2)}` : 'Sem Limite'}</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Status Panel (Restante / Troco) */}
+                            <div className={`p-4 rounded-xl border transition-colors ${
+                              rest > 0 
+                                ? 'bg-amber-500/10 border-amber-500/30' 
+                                : changeVal > 0 
+                                ? 'bg-brand-warning/10 border-brand-warning/30' 
+                                : 'bg-brand-success/10 border-brand-success/30'
+                            }`}>
+                              {rest > 0 ? (
+                                <div className="text-center">
+                                  <span className="text-[9px] text-amber-400 font-extrabold uppercase tracking-widest block leading-none mb-1">Restante a Pagar</span>
+                                  <span className="text-2xl font-black text-amber-400">R$ {rest.toFixed(2)}</span>
+                                </div>
+                              ) : changeVal > 0 ? (
+                                <div className="text-center">
+                                  <span className="text-[9px] text-brand-warning font-extrabold uppercase tracking-widest block leading-none mb-1">Troco Estimado</span>
+                                  <span className="text-2xl font-black text-brand-warning">R$ {changeVal.toFixed(2)}</span>
+                                </div>
+                              ) : (
+                                <div className="text-center animate-pulse">
+                                  <span className="text-[9px] text-brand-success font-extrabold uppercase tracking-widest block leading-none mb-1">Valor Exato Atingido</span>
+                                  <span className="text-sm font-black text-brand-success">Pronto para finalizar!</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Fiado (Prazo) option: Select client and show balance info */}
                       {paymentMethod === 'fiado' && (

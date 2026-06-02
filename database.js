@@ -323,6 +323,13 @@ if (typeof db.exec === 'function') {
     // Column already exists, ignore
   }
 
+  // Auto-migration to add split_grupo_id to vendas
+  try {
+    db.exec("ALTER TABLE vendas ADD COLUMN split_grupo_id INTEGER REFERENCES vendas(id);");
+  } catch (err) {
+    // Column already exists, ignore
+  }
+
   // Auto-migration to add valor_abertura_esperado and diferenca_abertura to caixa_sessoes
   try {
     db.exec("ALTER TABLE caixa_sessoes ADD COLUMN valor_abertura_esperado REAL;");
@@ -450,6 +457,10 @@ function initJsonDbFallback(dbPath) {
         data.vendas.forEach(v => {
           if (v.sessao_id === undefined) {
             v.sessao_id = null;
+            migrated = true;
+          }
+          if (v.split_grupo_id === undefined) {
+            v.split_grupo_id = null;
             migrated = true;
           }
         });
@@ -987,11 +998,132 @@ const dbService = {
 
   criarVenda: (venda, itens, usuarioId) => {
     if (db.isJson) {
-      const vendaId = db._data.vendas.length ? Math.max(...db._data.vendas.map(v => v.id)) + 1 : 1;
-      const dataVenda = new Date().toISOString();
       const activeSessao = db._data.caixa_sessoes ? db._data.caixa_sessoes.find(s => s.usuario_id === usuarioId && s.status === 'aberto') : null;
       const sessaoId = activeSessao ? activeSessao.id : null;
+      const dataVenda = new Date().toISOString();
       
+      if (venda.forma_pagamento === 'misto' && Array.isArray(venda.split)) {
+        const activeSplits = venda.split.filter(s => s.valor > 0);
+        if (activeSplits.length > 0) {
+          const primaryVendaId = db._data.vendas.length ? Math.max(...db._data.vendas.map(v => v.id)) + 1 : 1;
+          
+          // Primary Split Sale Record
+          const firstSplit = activeSplits[0];
+          const firstTroco = firstSplit.metodo === 'dinheiro' ? (venda.troco || 0) : 0;
+          const firstPago = firstSplit.metodo === 'dinheiro' ? (firstSplit.valor + firstTroco) : firstSplit.valor;
+          const firstClienteId = firstSplit.metodo === 'fiado' ? (venda.cliente_id || null) : null;
+
+          const primaryVenda = {
+            id: primaryVendaId,
+            usuario_id: usuarioId,
+            total: firstSplit.valor,
+            desconto: venda.desconto,
+            subtotal: parseFloat((firstSplit.valor + venda.desconto).toFixed(2)),
+            forma_pagamento: firstSplit.metodo,
+            troco: firstTroco,
+            pago: firstPago,
+            data_venda: dataVenda,
+            cliente_id: firstClienteId,
+            sessao_id: sessaoId,
+            split_grupo_id: primaryVendaId
+          };
+          db._data.vendas.push(primaryVenda);
+
+          // Update customer debt if primary is 'fiado'
+          if (firstSplit.metodo === 'fiado' && venda.cliente_id) {
+            if (!db._data.clientes) db._data.clientes = [];
+            const cIdx = db._data.clientes.findIndex(c => c.id === venda.cliente_id);
+            if (cIdx !== -1) {
+              db._data.clientes[cIdx].saldo_devedor = parseFloat(((db._data.clientes[cIdx].saldo_devedor || 0) + firstSplit.valor).toFixed(2));
+            }
+          }
+
+          // Insert items and adjust stock ONLY on primary sale record
+          itens.forEach(item => {
+            const itemId = db._data.itens_venda.length ? Math.max(...db._data.itens_venda.map(i => i.id)) + 1 : 1;
+            db._data.itens_venda.push({
+              id: itemId,
+              venda_id: primaryVendaId,
+              produto_id: item.produto_id,
+              quantidade: item.quantidade,
+              preco_unitario: item.preco_unitario,
+              total_item: item.quantidade * item.preco_unitario
+            });
+
+            const pIdx = db._data.produtos.findIndex(p => p.id === item.produto_id);
+            if (pIdx !== -1) {
+              const p = db._data.produtos[pIdx];
+              const cat = db._data.categorias.find(c => c.id === p.categoria_id);
+              if (cat && cat.controle_estoque === 1) {
+                const catIdx = db._data.categorias.findIndex(c => c.id === cat.id);
+                db._data.categorias[catIdx].estoque_atual -= item.quantidade;
+                
+                db._data.estoque_movimentacoes.push({
+                  id: db._data.estoque_movimentacoes.length + 1,
+                  produto_id: item.produto_id,
+                  categoria_id: cat.id,
+                  quantidade: -item.quantidade,
+                  tipo: 'saida',
+                  motivo: `Venda Mista #${primaryVendaId}`,
+                  usuario_id: usuarioId,
+                  data_movimentacao: dataVenda
+                });
+              } else {
+                p.estoque_atual -= item.quantidade;
+                db._data.estoque_movimentacoes.push({
+                  id: db._data.estoque_movimentacoes.length + 1,
+                  produto_id: item.produto_id,
+                  quantidade: -item.quantidade,
+                  tipo: 'saida',
+                  motivo: `Venda Mista #${primaryVendaId}`,
+                  usuario_id: usuarioId,
+                  data_movimentacao: dataVenda
+                });
+              }
+            }
+          });
+
+          // Insert remaining splits as secondary sale records (no items)
+          for (let i = 1; i < activeSplits.length; i++) {
+            const split = activeSplits[i];
+            const secondaryVendaId = db._data.vendas.length ? Math.max(...db._data.vendas.map(v => v.id)) + 1 : 1;
+            const splitTroco = split.metodo === 'dinheiro' ? (venda.troco || 0) : 0;
+            const splitPago = split.metodo === 'dinheiro' ? (split.valor + splitTroco) : split.valor;
+            const splitClienteId = split.metodo === 'fiado' ? (venda.cliente_id || null) : null;
+
+            const secondaryVenda = {
+              id: secondaryVendaId,
+              usuario_id: usuarioId,
+              total: split.valor,
+              desconto: 0,
+              subtotal: split.valor,
+              forma_pagamento: split.metodo,
+              troco: splitTroco,
+              pago: splitPago,
+              data_venda: dataVenda,
+              cliente_id: splitClienteId,
+              sessao_id: sessaoId,
+              split_grupo_id: primaryVendaId
+            };
+            db._data.vendas.push(secondaryVenda);
+
+            if (split.metodo === 'fiado' && venda.cliente_id) {
+              if (!db._data.clientes) db._data.clientes = [];
+              const cIdx = db._data.clientes.findIndex(c => c.id === venda.cliente_id);
+              if (cIdx !== -1) {
+                db._data.clientes[cIdx].saldo_devedor = parseFloat(((db._data.clientes[cIdx].saldo_devedor || 0) + split.valor).toFixed(2));
+              }
+            }
+          }
+
+          db._save();
+          dbService.logAcao(usuarioId, 'VENDA_CRIADA', `Venda Mista #${primaryVendaId} finalizada. Total: R$ ${venda.total.toFixed(2)}`);
+          return { id: primaryVendaId };
+        }
+      }
+
+      // Default single payment path
+      const vendaId = db._data.vendas.length ? Math.max(...db._data.vendas.map(v => v.id)) + 1 : 1;
       const novaVenda = {
         id: vendaId,
         usuario_id: usuarioId,
@@ -1003,7 +1135,8 @@ const dbService = {
         pago: venda.pago || 0,
         data_venda: dataVenda,
         cliente_id: venda.cliente_id || null,
-        sessao_id: sessaoId
+        sessao_id: sessaoId,
+        split_grupo_id: null
       };
       db._data.vendas.push(novaVenda);
 
@@ -1070,11 +1203,119 @@ const dbService = {
     const transaction = db.transaction(() => {
       const activeSessao = db.prepare("SELECT id FROM caixa_sessoes WHERE usuario_id = ? AND status = 'aberto'").get(usuarioId);
       const sessaoId = activeSessao ? activeSessao.id : null;
-
       const dataVenda = new Date().toISOString();
+
+      if (venda.forma_pagamento === 'misto' && Array.isArray(venda.split)) {
+        const activeSplits = venda.split.filter(s => s.valor > 0);
+        if (activeSplits.length > 0) {
+          // Primary Split insert
+          const firstSplit = activeSplits[0];
+          const firstTroco = firstSplit.metodo === 'dinheiro' ? (venda.troco || 0) : 0;
+          const firstPago = firstSplit.metodo === 'dinheiro' ? (firstSplit.valor + firstTroco) : firstSplit.valor;
+          const firstClienteId = firstSplit.metodo === 'fiado' ? (venda.cliente_id || null) : null;
+
+          const stmtVenda = db.prepare(`
+            INSERT INTO vendas (usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, cliente_id, sessao_id, split_grupo_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+          `);
+          const result = stmtVenda.run(
+            usuarioId,
+            firstSplit.valor,
+            venda.desconto,
+            parseFloat((firstSplit.valor + venda.desconto).toFixed(2)),
+            firstSplit.metodo,
+            firstTroco,
+            firstPago,
+            firstClienteId,
+            sessaoId
+          );
+          const primaryVendaId = result.lastInsertRowid;
+
+          // Set split_grupo_id to primaryVendaId
+          db.prepare('UPDATE vendas SET split_grupo_id = ? WHERE id = ?').run(primaryVendaId, primaryVendaId);
+
+          if (firstSplit.metodo === 'fiado' && venda.cliente_id) {
+            db.prepare('UPDATE clientes SET saldo_devedor = saldo_devedor + ? WHERE id = ?')
+              .run(firstSplit.valor, venda.cliente_id);
+          }
+
+          // Insert items ONLY on primary sale record
+          const stmtItem = db.prepare(`
+            INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario, total_item)
+            VALUES (?, ?, ?, ?, ?)
+          `);
+          
+          const stmtCheckCat = db.prepare(`
+            SELECT p.categoria_id, c.controle_estoque 
+            FROM produtos p 
+            LEFT JOIN categorias c ON p.categoria_id = c.id 
+            WHERE p.id = ?
+          `);
+
+          const stmtUpdateEstoque = db.prepare(`
+            UPDATE produtos SET estoque_atual = estoque_atual - ? WHERE id = ?
+          `);
+
+          const stmtUpdateCatEstoque = db.prepare(`
+            UPDATE categorias SET estoque_atual = estoque_atual - ? WHERE id = ?
+          `);
+
+          const stmtMov = db.prepare(`
+            INSERT INTO estoque_movimentacoes (produto_id, categoria_id, quantidade, tipo, motivo, usuario_id, data_movimentacao)
+            VALUES (?, ?, ?, 'saida', ?, ?, ?)
+          `);
+
+          for (const item of itens) {
+            stmtItem.run(primaryVendaId, item.produto_id, item.quantidade, item.preco_unitario, item.quantidade * item.preco_unitario);
+            
+            const info = stmtCheckCat.get(item.produto_id);
+            if (info && info.controle_estoque === 1) {
+              stmtUpdateCatEstoque.run(item.quantidade, info.categoria_id);
+              stmtMov.run(item.produto_id, info.categoria_id, -item.quantidade, `Venda Mista #${primaryVendaId}`, usuarioId, dataVenda);
+            } else {
+              stmtUpdateEstoque.run(item.quantidade, item.produto_id);
+              stmtMov.run(item.produto_id, null, -item.quantidade, `Venda Mista #${primaryVendaId}`, usuarioId, dataVenda);
+            }
+          }
+
+          // Insert remaining splits as secondary sale records (no items)
+          const stmtSecondaryVenda = db.prepare(`
+            INSERT INTO vendas (usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, cliente_id, sessao_id, split_grupo_id)
+            VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+          `);
+
+          for (let i = 1; i < activeSplits.length; i++) {
+            const split = activeSplits[i];
+            const splitTroco = split.metodo === 'dinheiro' ? (venda.troco || 0) : 0;
+            const splitPago = split.metodo === 'dinheiro' ? (split.valor + splitTroco) : split.valor;
+            const splitClienteId = split.metodo === 'fiado' ? (venda.cliente_id || null) : null;
+
+            stmtSecondaryVenda.run(
+              usuarioId,
+              split.valor,
+              split.valor,
+              split.metodo,
+              splitTroco,
+              splitPago,
+              splitClienteId,
+              sessaoId,
+              primaryVendaId
+            );
+
+            if (split.metodo === 'fiado' && venda.cliente_id) {
+              db.prepare('UPDATE clientes SET saldo_devedor = saldo_devedor + ? WHERE id = ?')
+                .run(split.valor, venda.cliente_id);
+            }
+          }
+
+          return primaryVendaId;
+        }
+      }
+
+      // Default single payment path
       const stmtVenda = db.prepare(`
-        INSERT INTO vendas (usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, cliente_id, sessao_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO vendas (usuario_id, total, desconto, subtotal, forma_pagamento, troco, pago, cliente_id, sessao_id, split_grupo_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
       `);
       const result = stmtVenda.run(
           usuarioId,
@@ -1143,25 +1384,75 @@ const dbService = {
 
   getVendas: () => {
     if (db.isJson) {
-      return db._data.vendas.map(v => {
-        const u = db._data.usuarios.find(u => u.id === v.usuario_id);
-        const c = v.cliente_id && db._data.clientes ? db._data.clientes.find(c => c.id === v.cliente_id) : null;
-        return { ...v, usuario_nome: u ? u.name : 'Desconhecido', cliente_nome: c ? c.nome : null };
-      }).reverse();
+      const list = [];
+      db._data.vendas.forEach(v => {
+        if (v.split_grupo_id === null || v.id === v.split_grupo_id) {
+          let total = v.total;
+          let subtotal = v.subtotal;
+          let forma_pagamento = v.forma_pagamento;
+          if (v.split_grupo_id !== null) {
+            const related = db._data.vendas.filter(rv => rv.split_grupo_id === v.split_grupo_id);
+            total = related.reduce((acc, rv) => acc + rv.total, 0);
+            subtotal = related.reduce((acc, rv) => acc + rv.subtotal, 0);
+            forma_pagamento = 'misto';
+          }
+          const u = db._data.usuarios.find(user => user.id === v.usuario_id);
+          const c = v.cliente_id && db._data.clientes ? db._data.clientes.find(c => c.id === v.cliente_id) : null;
+          list.push({ 
+            ...v, 
+            total,
+            subtotal,
+            forma_pagamento,
+            usuario_nome: u ? u.name : 'Desconhecido', 
+            cliente_nome: c ? c.nome : null 
+          });
+        }
+      });
+      return list.reverse();
     }
     return db.prepare(`
-      SELECT v.*, u.name as usuario_nome, c.nome as cliente_nome
+      SELECT 
+        v.id, v.usuario_id, v.data_venda, v.cliente_id, v.sessao_id, v.desconto, v.troco, v.pago, v.split_grupo_id,
+        u.name as usuario_nome, c.nome as cliente_nome,
+        CASE WHEN v.split_grupo_id IS NOT NULL THEN 'misto' ELSE v.forma_pagamento END as forma_pagamento,
+        CASE WHEN v.split_grupo_id IS NOT NULL THEN (SELECT SUM(total) FROM vendas WHERE split_grupo_id = v.split_grupo_id) ELSE v.total END as total,
+        CASE WHEN v.split_grupo_id IS NOT NULL THEN (SELECT SUM(subtotal) FROM vendas WHERE split_grupo_id = v.split_grupo_id) ELSE v.subtotal END as subtotal
       FROM vendas v
       LEFT JOIN usuarios u ON v.usuario_id = u.id
       LEFT JOIN clientes c ON v.cliente_id = c.id
+      WHERE v.split_grupo_id IS NULL OR v.id = v.split_grupo_id
       ORDER BY v.id DESC
     `).all();
   },
 
   getVendaDetalhes: (vendaId) => {
     if (db.isJson) {
-      const venda = db._data.vendas.find(v => v.id === vendaId);
+      let venda = db._data.vendas.find(v => v.id === vendaId);
       if (!venda) return null;
+
+      let split_detalhes = null;
+      if (venda.split_grupo_id !== null) {
+        const related = db._data.vendas.filter(rv => rv.split_grupo_id === venda.split_grupo_id);
+        const total = related.reduce((acc, rv) => acc + rv.total, 0);
+        const subtotal = related.reduce((acc, rv) => acc + rv.subtotal, 0);
+        const troco = related.find(rv => rv.forma_pagamento === 'dinheiro')?.troco || 0;
+        const pago = related.reduce((acc, rv) => acc + rv.pago, 0);
+        const primary = related.find(rv => rv.id === venda.split_grupo_id) || venda;
+
+        split_detalhes = related.map(rv => ({ metodo: rv.forma_pagamento, valor: rv.total }));
+
+        venda = {
+          ...primary,
+          total,
+          subtotal,
+          troco,
+          pago,
+          forma_pagamento: 'misto',
+          split_detalhes
+        };
+        vendaId = venda.split_grupo_id;
+      }
+
       const u = db._data.usuarios.find(u => u.id === venda.usuario_id);
       const c = venda.cliente_id && db._data.clientes ? db._data.clientes.find(c => c.id === venda.cliente_id) : null;
       const itens = db._data.itens_venda
@@ -1180,7 +1471,7 @@ const dbService = {
       };
     }
 
-    const venda = db.prepare(`
+    let venda = db.prepare(`
       SELECT v.*, u.name as usuario_nome, c.nome as cliente_nome 
       FROM vendas v 
       LEFT JOIN usuarios u ON v.usuario_id = u.id 
@@ -1188,6 +1479,37 @@ const dbService = {
       WHERE v.id = ?
     `).get(vendaId);
     if (!venda) return null;
+
+    let split_detalhes = null;
+    if (venda.split_grupo_id !== null) {
+      const related = db.prepare("SELECT * FROM vendas WHERE split_grupo_id = ?").all(venda.split_grupo_id);
+      const total = related.reduce((acc, rv) => acc + rv.total, 0);
+      const subtotal = related.reduce((acc, rv) => acc + rv.subtotal, 0);
+      const troco = related.find(rv => rv.forma_pagamento === 'dinheiro')?.troco || 0;
+      const pago = related.reduce((acc, rv) => acc + rv.pago, 0);
+      const primary = related.find(rv => rv.id === venda.split_grupo_id) || venda;
+
+      split_detalhes = related.map(rv => ({ metodo: rv.forma_pagamento, valor: rv.total }));
+
+      const primaryWithNames = db.prepare(`
+        SELECT v.*, u.name as usuario_nome, c.nome as cliente_nome
+        FROM vendas v
+        LEFT JOIN usuarios u ON v.usuario_id = u.id
+        LEFT JOIN clientes c ON v.cliente_id = c.id
+        WHERE v.id = ?
+      `).get(venda.split_grupo_id) || venda;
+
+      venda = {
+        ...primaryWithNames,
+        total,
+        subtotal,
+        troco,
+        pago,
+        forma_pagamento: 'misto',
+        split_detalhes
+      };
+      vendaId = venda.split_grupo_id;
+    }
 
     const itens = db.prepare(`
       SELECT iv.*, p.nome as produto_nome, p.codigo_barras
@@ -1422,7 +1744,8 @@ const dbService = {
 
       let faturamento = 0;
       let ticketMedio = 0;
-      let totalVendas = filteredSales.length;
+      const distinctSaleGroups = new Set(filteredSales.map(v => v.split_grupo_id || v.id));
+      let totalVendas = distinctSaleGroups.size;
       let totalItensVendidos = 0;
       let lucro = 0;
 
@@ -1480,7 +1803,7 @@ const dbService = {
     }
 
     try {
-      const faturamentoRow = db.prepare(`SELECT SUM(total) as sum, COUNT(id) as count FROM vendas WHERE ${dateFilter}`).get();
+      const faturamentoRow = db.prepare(`SELECT SUM(total) as sum, COUNT(DISTINCT COALESCE(split_grupo_id, id)) as count FROM vendas WHERE ${dateFilter}`).get();
       const faturamento = faturamentoRow.sum || 0;
       const totalVendas = faturamentoRow.count || 0;
       const ticketMedio = totalVendas ? (faturamento / totalVendas) : 0;

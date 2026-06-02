@@ -132,26 +132,56 @@ export default function Relatorios() {
             <span>R$ ${venda.total.toFixed(2)}</span>
           </div>
           <div class="divider"></div>
-          <div class="row">
-            <span>F. Pagamento:</span>
-            <span class="bold">${venda.forma_pagamento === 'fiado' ? 'FIADO (A PRAZO)' : venda.forma_pagamento.toUpperCase()}</span>
-          </div>
-          ${venda.forma_pagamento === 'fiado' && venda.cliente_nome ? `
+          ${venda.forma_pagamento === 'misto' ? `
             <div class="row">
-              <span>Cliente:</span>
-              <span class="bold">${venda.cliente_nome.toUpperCase()}</span>
+              <span>F. Pagamento:</span>
+              <span class="bold">MISTO / DIVIDIDO</span>
             </div>
-          ` : ''}
-          ${venda.forma_pagamento === 'dinheiro' ? `
+            ${Array.isArray(venda.split_detalhes) ? venda.split_detalhes.map(s => {
+              const isFiado = s.metodo === 'fiado';
+              const label = isFiado ? 'FIADO (A PRAZO)' : s.metodo.toUpperCase();
+              const displayVal = s.metodo === 'dinheiro' ? s.valor + (venda.troco || 0) : s.valor;
+              return `
+                <div class="row">
+                  <span>&nbsp;&nbsp;PAGO EM ${label}:</span>
+                  <span>R$ ${displayVal.toFixed(2)}</span>
+                </div>
+              `;
+            }).join('') : ''}
+            ${(venda.split_detalhes?.some(s => s.metodo === 'fiado') || false) && venda.cliente_nome ? `
+              <div class="row">
+                <span>&nbsp;&nbsp;Cliente Fiado:</span>
+                <span class="bold">${venda.cliente_nome.toUpperCase()}</span>
+              </div>
+            ` : ''}
+            ${venda.troco > 0 ? `
+              <div class="row">
+                <span>Troco Dinheiro:</span>
+                <span>R$ ${venda.troco.toFixed(2)}</span>
+              </div>
+            ` : ''}
+          ` : `
             <div class="row">
-              <span>Valor Pago:</span>
-              <span>R$ ${venda.pago.toFixed(2)}</span>
+              <span>F. Pagamento:</span>
+              <span class="bold">${venda.forma_pagamento === 'fiado' ? 'FIADO (A PRAZO)' : venda.forma_pagamento.toUpperCase()}</span>
             </div>
-            <div class="row">
-              <span>Troco:</span>
-              <span>R$ ${venda.troco.toFixed(2)}</span>
-            </div>
-          ` : ''}
+            ${venda.forma_pagamento === 'fiado' && venda.cliente_nome ? `
+              <div class="row">
+                <span>Cliente:</span>
+                <span class="bold">${venda.cliente_nome.toUpperCase()}</span>
+              </div>
+            ` : ''}
+            ${venda.forma_pagamento === 'dinheiro' ? `
+              <div class="row">
+                <span>Valor Pago:</span>
+                <span>R$ ${venda.pago.toFixed(2)}</span>
+              </div>
+              <div class="row">
+                <span>Troco:</span>
+                <span>R$ ${venda.troco.toFixed(2)}</span>
+              </div>
+            ` : ''}
+          `}
           
           <div class="divider"></div>
           <div class="text-center" style="margin-top:10px;">
@@ -461,9 +491,11 @@ export default function Relatorios() {
                         <span className={`uppercase text-[10px] px-2 py-0.5 rounded border ${
                           v.forma_pagamento === 'fiado' 
                             ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' 
+                            : v.forma_pagamento === 'misto'
+                            ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
                             : 'bg-brand-border/60 text-gray-300 border-brand-border'
                         }`}>
-                          {v.forma_pagamento === 'fiado' ? `Fiado: ${v.cliente_nome || 'Cliente'}` : v.forma_pagamento}
+                          {v.forma_pagamento === 'fiado' ? `Fiado: ${v.cliente_nome || 'Cliente'}` : v.forma_pagamento === 'misto' ? 'Misto / Dividido' : v.forma_pagamento}
                         </span>
                       </td>
                       <td className="py-4 px-4 text-right text-brand-danger">R$ {v.desconto.toFixed(2)}</td>
@@ -676,9 +708,24 @@ export default function Relatorios() {
                 <span className="text-[10px] text-gray-500 font-bold uppercase">Data / Hora</span>
                 <p className="font-bold text-white mt-0.5">{new Date(selectedVenda.venda.data_venda).toLocaleString('pt-BR')}</p>
               </div>
-              <div>
+              <div className={selectedVenda.venda.forma_pagamento === 'misto' ? 'col-span-2' : ''}>
                 <span className="text-[10px] text-gray-500 font-bold uppercase">Forma Pagamento</span>
-                <p className="font-bold text-brand-accent uppercase mt-0.5">{selectedVenda.venda.forma_pagamento}</p>
+                <p className="font-bold text-brand-accent uppercase mt-0.5">
+                  {selectedVenda.venda.forma_pagamento === 'misto' ? 'Misto / Dividido' : selectedVenda.venda.forma_pagamento}
+                </p>
+                {selectedVenda.venda.forma_pagamento === 'misto' && Array.isArray(selectedVenda.venda.split_detalhes) && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {selectedVenda.venda.split_detalhes.map((s, sIdx) => {
+                      const isFiado = s.metodo === 'fiado';
+                      const label = isFiado ? 'FIADO (A PRAZO)' : s.metodo.toUpperCase();
+                      return (
+                        <span key={sIdx} className="px-2.5 py-1 bg-brand-dark rounded-lg text-[10px] text-gray-300 font-semibold border border-brand-border/40">
+                          {label}: R$ {s.valor.toFixed(2)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               <div>
                 <span className="text-[10px] text-gray-500 font-bold uppercase">Total Líquido</span>
