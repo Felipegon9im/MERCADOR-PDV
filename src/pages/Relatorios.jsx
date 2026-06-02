@@ -19,6 +19,8 @@ export default function Relatorios() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Cash Register Sessions Audit states
   const [activeTab, setActiveTab] = useState('vendas'); // 'vendas' or 'caixas'
@@ -339,8 +341,150 @@ export default function Relatorios() {
     const matchesSearch = v.id.toString().includes(searchTerm) || 
                           v.usuario_nome.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesPayment = paymentFilter === '' || v.forma_pagamento === paymentFilter;
-    return matchesSearch && matchesPayment;
+    
+    let matchesDate = true;
+    if (startDate) {
+      const start = new Date(startDate + 'T00:00:00');
+      const vDate = new Date(v.data_venda);
+      matchesDate = matchesDate && vDate >= start;
+    }
+    if (endDate) {
+      const end = new Date(endDate + 'T23:59:59');
+      const vDate = new Date(v.data_venda);
+      matchesDate = matchesDate && vDate <= end;
+    }
+    
+    return matchesSearch && matchesPayment && matchesDate;
   });
+
+  const calculatePaymentSummary = (salesList) => {
+    const summary = {
+      dinheiro: 0,
+      pix: 0,
+      debito: 0,
+      credito: 0,
+      fiado: 0,
+      total: 0,
+      desconto: 0
+    };
+
+    salesList.forEach(v => {
+      summary.total += v.total;
+      summary.desconto += v.desconto;
+
+      if (v.forma_pagamento === 'misto') {
+        if (Array.isArray(v.split_detalhes)) {
+          v.split_detalhes.forEach(s => {
+            const m = s.metodo;
+            if (summary[m] !== undefined) {
+              summary[m] += s.valor;
+            }
+          });
+        }
+      } else {
+        const m = v.forma_pagamento;
+        if (summary[m] !== undefined) {
+          summary[m] += v.total;
+        }
+      }
+    });
+
+    return summary;
+  };
+
+  const handlePrintPeriodReport = async () => {
+    const summary = calculatePaymentSummary(filteredVendas);
+    
+    const periodStr = startDate && endDate
+      ? `${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} ate ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`
+      : startDate
+      ? `A partir de ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')}`
+      : endDate
+      ? `Ate ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`
+      : "Geral (Todo o Periodo)";
+
+    const reportHtml = `
+      <html>
+        <head>
+          <style>
+            body { font-family: 'Courier New', Courier, monospace; font-size: 11px; margin: 0; padding: 10px; color: black; }
+            .text-center { text-align: center; }
+            .divider { border-top: 1px dashed black; margin: 5px 0; }
+            .row { display: flex; justify-content: space-between; }
+            .bold { font-weight: bold; }
+            .section-title { font-weight: bold; margin-top: 8px; text-transform: uppercase; }
+          </style>
+        </head>
+        <body>
+          <div class="text-center">
+            <span class="bold">MERCADO & CONVENIENCIA</span><br/>
+            <div class="divider"></div>
+            <span class="bold">RELATORIO FINANCEIRO DE VENDAS</span><br/>
+            <span>Periodo: ${periodStr}</span>
+          </div>
+          <div class="divider"></div>
+          
+          <div class="row">
+            <span>Total Transacoes:</span>
+            <span class="bold">${filteredVendas.length}</span>
+          </div>
+          
+          <div class="divider"></div>
+          <div class="section-title">Resumo por Tipo de Pagamento</div>
+          <div class="divider"></div>
+          
+          <div class="row">
+            <span>DINHEIRO GAVETA:</span>
+            <span>R$ ${summary.dinheiro.toFixed(2)}</span>
+          </div>
+          <div class="row">
+            <span>PIX RECEBIDO:</span>
+            <span>R$ ${summary.pix.toFixed(2)}</span>
+          </div>
+          <div class="row">
+            <span>CARTAO DEBITO:</span>
+            <span>R$ ${summary.debito.toFixed(2)}</span>
+          </div>
+          <div class="row">
+            <span>CARTAO CREDITO:</span>
+            <span>R$ ${summary.credito.toFixed(2)}</span>
+          </div>
+          <div class="row">
+            <span>FIADO (A PRAZO):</span>
+            <span class="bold">R$ ${summary.fiado.toFixed(2)}</span>
+          </div>
+          
+          <div class="divider"></div>
+          <div class="row">
+            <span>SUBTOTAL BRUTO:</span>
+            <span>R$ ${(summary.total + summary.desconto).toFixed(2)}</span>
+          </div>
+          <div class="row">
+            <span>DESCONTOS:</span>
+            <span>- R$ ${summary.desconto.toFixed(2)}</span>
+          </div>
+          <div class="row bold" style="font-size:12px;">
+            <span>TOTAL LIQUIDO:</span>
+            <span>R$ ${summary.total.toFixed(2)}</span>
+          </div>
+          
+          <div class="divider"></div>
+          <div class="text-center" style="margin-top:15px; font-size: 9px; color: #555;">
+            <span>Emitido em: ${new Date().toLocaleString('pt-BR')}</span><br/>
+            <span>MercadoPDV Retaguarda</span>
+          </div>
+        </body>
+      </html>
+    `;
+
+    try {
+      await api.print.imprimirCupom(reportHtml);
+      alert("Relatorio do periodo enviado para a impressora!");
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao imprimir relatorio: " + e.message);
+    }
+  };
 
   // Calculate totals for filtered list
   const totalFaturamento = filteredVendas.reduce((acc, v) => acc + v.total, 0);
@@ -430,14 +574,14 @@ export default function Relatorios() {
           </div>
 
           {/* Filters card */}
-          <div className="grid grid-cols-4 gap-4 bg-brand-card/40 border border-brand-border/50 rounded-2xl p-4">
+          <div className="grid grid-cols-6 gap-4 bg-brand-card/40 border border-brand-border/50 rounded-2xl p-4 items-center">
             <div className="col-span-2 relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-500">
                 <Search size={16} />
               </span>
               <input
                 type="text"
-                placeholder="Buscar por ID da Venda ou Nome do Operador..."
+                placeholder="Buscar por ID ou Operador..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-brand-dark border border-brand-border/60 focus:border-brand-accent rounded-xl py-2.5 pl-10 pr-4 text-xs font-semibold text-white outline-none transition-colors"
@@ -450,17 +594,47 @@ export default function Relatorios() {
                 onChange={(e) => setPaymentFilter(e.target.value)}
                 className="w-full bg-brand-dark border border-brand-border/60 focus:border-brand-accent rounded-xl py-2.5 px-4 text-xs font-semibold text-gray-300 outline-none transition-colors"
               >
-                <option value="">Formas de Pagamento (Todas)</option>
+                <option value="">Todos Pagamentos</option>
                 <option value="dinheiro">Dinheiro</option>
                 <option value="pix">PIX QR Code</option>
                 <option value="debito">Débito</option>
                 <option value="credito">Crédito</option>
                 <option value="fiado">Fiado (A Prazo)</option>
+                <option value="misto">Misto / Dividido</option>
               </select>
             </div>
 
-            <div className="col-span-1 flex items-center justify-end px-2 text-xs font-bold text-gray-500">
-              Mostrando {filteredVendas.length} transações
+            <div className="col-span-1">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full bg-brand-dark border border-brand-border/60 focus:border-brand-accent rounded-xl py-2 px-3 text-[11px] font-semibold text-gray-300 outline-none transition-colors"
+                title="Data Inicial"
+              />
+            </div>
+
+            <div className="col-span-1">
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full bg-brand-dark border border-brand-border/60 focus:border-brand-accent rounded-xl py-2 px-3 text-[11px] font-semibold text-gray-300 outline-none transition-colors"
+                title="Data Final"
+              />
+            </div>
+
+            <div className="col-span-1 flex items-center justify-end space-x-2">
+              <button
+                type="button"
+                onClick={handlePrintPeriodReport}
+                disabled={filteredVendas.length === 0}
+                className="w-full bg-brand-accent hover:bg-brand-accentHover disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 px-4 rounded-xl text-xs transition-colors shadow-lg shadow-indigo-500/20 flex items-center justify-center space-x-1.5 cursor-pointer"
+                title="Imprimir Relatório do Período"
+              >
+                <Printer size={14} />
+                <span>Imprimir</span>
+              </button>
             </div>
           </div>
 
