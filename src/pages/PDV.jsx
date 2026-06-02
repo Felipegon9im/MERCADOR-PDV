@@ -817,6 +817,46 @@ export default function PDV() {
     focusBarcode();
   };
 
+  const handleAutofillMisto = (method) => {
+    const dinheiro = parseFloat(mistoValues.dinheiro || 0);
+    const pix = parseFloat(mistoValues.pix || 0);
+    const debito = parseFloat(mistoValues.debito || 0);
+    const credito = parseFloat(mistoValues.credito || 0);
+    const fiado = parseFloat(mistoValues.fiado || 0);
+
+    const cardFeePct = parseFloat(cardSettings.taxaMaquinaCredito) || 0;
+
+    if (method === 'credito') {
+      const sumOthers = dinheiro + pix + debito + fiado;
+      const restBeforeCredit = total - sumOthers;
+      if (restBeforeCredit <= 0) return;
+
+      if (cardSettings.repassarTaxaCredito && cardFeePct > 0 && cardFeePct < 100) {
+        const autofillVal = restBeforeCredit / (1 - cardFeePct / 100);
+        setMistoValues({ ...mistoValues, credito: parseFloat(autofillVal.toFixed(2)).toString() });
+      } else {
+        setMistoValues({ ...mistoValues, credito: parseFloat(restBeforeCredit.toFixed(2)).toString() });
+      }
+    } else {
+      let sumOthers = 0;
+      if (method === 'dinheiro') sumOthers = pix + debito + credito + fiado;
+      else if (method === 'pix') sumOthers = dinheiro + debito + credito + fiado;
+      else if (method === 'debito') sumOthers = dinheiro + pix + credito + fiado;
+      else if (method === 'fiado') sumOthers = dinheiro + pix + debito + credito;
+
+      const cardFeeVal = cardSettings.repassarTaxaCredito ? parseFloat((credito * (cardFeePct / 100)).toFixed(2)) : 0;
+      const saleTotalWithFee = total + cardFeeVal;
+      const restForMethod = saleTotalWithFee - sumOthers;
+      
+      if (restForMethod <= 0) return;
+
+      setMistoValues({
+        ...mistoValues,
+        [method]: parseFloat(restForMethod.toFixed(2)).toString()
+      });
+    }
+  };
+
   const handleFinalizeSale = async () => {
     if (items.length === 0) return;
 
@@ -1654,67 +1694,122 @@ export default function PDV() {
                             
                             <div className="space-y-2">
                               {/* Dinheiro Input */}
-                              <div className="flex items-center space-x-2 bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
-                                <DollarSign size={14} className="text-emerald-400 shrink-0" />
-                                <span className="text-xs text-gray-400 font-bold uppercase w-16">Dinheiro</span>
+                              <div className="flex items-center justify-between bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
+                                <div className="flex items-center space-x-2">
+                                  <DollarSign size={14} className="text-emerald-400 shrink-0" />
+                                  <span className="text-xs text-gray-400 font-bold uppercase w-16">Dinheiro</span>
+                                  {rest > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAutofillMisto('dinheiro')}
+                                      className="text-[9px] bg-brand-border hover:bg-brand-accent/20 hover:text-brand-accent border border-brand-border hover:border-brand-accent/30 text-gray-400 font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer leading-none"
+                                    >
+                                      Completar
+                                    </button>
+                                  )}
+                                </div>
                                 <input
                                   type="number"
                                   placeholder="0,00"
                                   value={mistoValues.dinheiro}
                                   onChange={(e) => setMistoValues({ ...mistoValues, dinheiro: e.target.value })}
-                                  className="w-full bg-transparent text-right text-sm font-bold text-white outline-none"
+                                  className="w-32 bg-transparent text-right text-sm font-bold text-white outline-none"
                                 />
                               </div>
 
                               {/* PIX Input */}
-                              <div className="flex items-center space-x-2 bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
-                                <QrCode size={14} className="text-brand-success shrink-0" />
-                                <span className="text-xs text-gray-400 font-bold uppercase w-16">PIX</span>
+                              <div className="flex items-center justify-between bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
+                                <div className="flex items-center space-x-2">
+                                  <QrCode size={14} className="text-brand-success shrink-0" />
+                                  <span className="text-xs text-gray-400 font-bold uppercase w-16">PIX</span>
+                                  {rest > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAutofillMisto('pix')}
+                                      className="text-[9px] bg-brand-border hover:bg-brand-accent/20 hover:text-brand-accent border border-brand-border hover:border-brand-accent/30 text-gray-400 font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer leading-none"
+                                    >
+                                      Completar
+                                    </button>
+                                  )}
+                                </div>
                                 <input
                                   type="number"
                                   placeholder="0,00"
                                   value={mistoValues.pix}
                                   onChange={(e) => setMistoValues({ ...mistoValues, pix: e.target.value })}
-                                  className="w-full bg-transparent text-right text-sm font-bold text-white outline-none"
+                                  className="w-32 bg-transparent text-right text-sm font-bold text-white outline-none"
                                 />
                               </div>
 
                               {/* Debito Input */}
-                              <div className="flex items-center space-x-2 bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
-                                <CreditCard size={14} className="text-brand-accent shrink-0" />
-                                <span className="text-xs text-gray-400 font-bold uppercase w-16">Débito</span>
+                              <div className="flex items-center justify-between bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
+                                <div className="flex items-center space-x-2">
+                                  <CreditCard size={14} className="text-brand-accent shrink-0" />
+                                  <span className="text-xs text-gray-400 font-bold uppercase w-16">Débito</span>
+                                  {rest > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAutofillMisto('debito')}
+                                      className="text-[9px] bg-brand-border hover:bg-brand-accent/20 hover:text-brand-accent border border-brand-border hover:border-brand-accent/30 text-gray-400 font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer leading-none"
+                                    >
+                                      Completar
+                                    </button>
+                                  )}
+                                </div>
                                 <input
                                   type="number"
                                   placeholder="0,00"
                                   value={mistoValues.debito}
                                   onChange={(e) => setMistoValues({ ...mistoValues, debito: e.target.value })}
-                                  className="w-full bg-transparent text-right text-sm font-bold text-white outline-none"
+                                  className="w-32 bg-transparent text-right text-sm font-bold text-white outline-none"
                                 />
                               </div>
 
                               {/* Credito Input */}
-                              <div className="flex items-center space-x-2 bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
-                                <CreditCard size={14} className="text-indigo-400 shrink-0" />
-                                <span className="text-xs text-gray-400 font-bold uppercase w-16">Crédito</span>
+                              <div className="flex items-center justify-between bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
+                                <div className="flex items-center space-x-2">
+                                  <CreditCard size={14} className="text-indigo-400 shrink-0" />
+                                  <span className="text-xs text-gray-400 font-bold uppercase w-16">Crédito</span>
+                                  {rest > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAutofillMisto('credito')}
+                                      className="text-[9px] bg-brand-border hover:bg-brand-accent/20 hover:text-brand-accent border border-brand-border hover:border-brand-accent/30 text-gray-400 font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer leading-none"
+                                    >
+                                      Completar
+                                    </button>
+                                  )}
+                                </div>
                                 <input
                                   type="number"
                                   placeholder="0,00"
                                   value={mistoValues.credito}
                                   onChange={(e) => setMistoValues({ ...mistoValues, credito: e.target.value })}
-                                  className="w-full bg-transparent text-right text-sm font-bold text-white outline-none"
+                                  className="w-32 bg-transparent text-right text-sm font-bold text-white outline-none"
                                 />
                               </div>
 
                               {/* Fiado Input */}
-                              <div className="flex items-center space-x-2 bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
-                                <User size={14} className="text-amber-400 shrink-0" />
-                                <span className="text-xs text-gray-400 font-bold uppercase w-16">Fiado</span>
+                              <div className="flex items-center justify-between bg-brand-dark/40 border border-brand-border/40 p-2 rounded-xl">
+                                <div className="flex items-center space-x-2">
+                                  <User size={14} className="text-amber-400 shrink-0" />
+                                  <span className="text-xs text-gray-400 font-bold uppercase w-16">Fiado</span>
+                                  {rest > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAutofillMisto('fiado')}
+                                      className="text-[9px] bg-brand-border hover:bg-brand-accent/20 hover:text-brand-accent border border-brand-border hover:border-brand-accent/30 text-gray-400 font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer leading-none"
+                                    >
+                                      Completar
+                                    </button>
+                                  )}
+                                </div>
                                 <input
                                   type="number"
                                   placeholder="0,00"
                                   value={mistoValues.fiado}
                                   onChange={(e) => setMistoValues({ ...mistoValues, fiado: e.target.value })}
-                                  className="w-full bg-transparent text-right text-sm font-bold text-white outline-none"
+                                  className="w-32 bg-transparent text-right text-sm font-bold text-white outline-none"
                                 />
                               </div>
                             </div>
