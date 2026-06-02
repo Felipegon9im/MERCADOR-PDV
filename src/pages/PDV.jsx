@@ -824,15 +824,23 @@ export default function PDV() {
     let mistoTroco = 0;
     let sumMisto = 0;
 
+    const cardFeePct = parseFloat(cardSettings.taxaMaquinaCredito) || 0;
+    const isCredit = paymentMethod === 'credito';
+    const isMisto = paymentMethod === 'misto';
+    const creditoVal = isMisto ? parseFloat(mistoValues.credito || 0) : 0;
+    const cardFeeVal = isCredit 
+      ? parseFloat((total * (cardFeePct / 100)).toFixed(2)) 
+      : (isMisto ? parseFloat((creditoVal * (cardFeePct / 100)).toFixed(2)) : 0);
+    const saleFinalTotal = (isCredit || isMisto) && cardSettings.repassarTaxaCredito ? (total + cardFeeVal) : total;
+
     if (paymentMethod === 'misto') {
       const dinheiro = parseFloat(mistoValues.dinheiro || 0);
       const pix = parseFloat(mistoValues.pix || 0);
       const debito = parseFloat(mistoValues.debito || 0);
-      const credito = parseFloat(mistoValues.credito || 0);
       const fiado = parseFloat(mistoValues.fiado || 0);
 
-      sumMisto = dinheiro + pix + debito + credito + fiado;
-      const mistoRestante = total - sumMisto;
+      sumMisto = dinheiro + pix + debito + creditoVal + fiado;
+      const mistoRestante = saleFinalTotal - sumMisto;
 
       if (parseFloat(mistoRestante.toFixed(2)) > 0) {
         playBeep('error');
@@ -840,13 +848,13 @@ export default function PDV() {
         return;
       }
 
-      if (parseFloat((sumMisto - total).toFixed(2)) > 0) {
-        if (dinheiro <= 0 || parseFloat((sumMisto - total).toFixed(2)) > dinheiro) {
+      if (parseFloat((sumMisto - saleFinalTotal).toFixed(2)) > 0) {
+        if (dinheiro <= 0 || parseFloat((sumMisto - saleFinalTotal).toFixed(2)) > dinheiro) {
           playBeep('error');
           showAlert("O valor pago excede o total da venda. Apenas pagamentos em dinheiro podem gerar troco.");
           return;
         }
-        mistoTroco = parseFloat((sumMisto - total).toFixed(2));
+        mistoTroco = parseFloat((sumMisto - saleFinalTotal).toFixed(2));
       }
 
       if (fiado > 0) {
@@ -870,7 +878,7 @@ export default function PDV() {
         { metodo: 'dinheiro', valor: parseFloat((dinheiro - mistoTroco).toFixed(2)) },
         { metodo: 'pix', valor: pix },
         { metodo: 'debito', valor: debito },
-        { metodo: 'credito', valor: credito },
+        { metodo: 'credito', valor: creditoVal },
         { metodo: 'fiado', valor: fiado }
       ].filter(s => s.valor > 0);
     } else if (paymentMethod === 'fiado') {
@@ -889,11 +897,6 @@ export default function PDV() {
         }
       }
     }
-
-    const cardFeePct = parseFloat(cardSettings.taxaMaquinaCredito) || 0;
-    const isCredit = paymentMethod === 'credito';
-    const cardFeeVal = isCredit ? parseFloat((total * (cardFeePct / 100)).toFixed(2)) : 0;
-    const saleFinalTotal = isCredit && cardSettings.repassarTaxaCredito ? (total + cardFeeVal) : total;
 
     const venda = {
       total: saleFinalTotal,
@@ -973,7 +976,7 @@ export default function PDV() {
               <span>Desconto:</span>
               <span>R$ ${discount.toFixed(2)}</span>
             </div>
-            ${isCredit && cardFeePct > 0 ? (
+            ${(isCredit || (isMisto && creditoVal > 0)) && cardFeePct > 0 ? (
               cardSettings.repassarTaxaCredito ? `
                 <div class="row">
                   <span>Acresc. Cartao (${cardFeePct}%):</span>
@@ -1535,12 +1538,16 @@ export default function PDV() {
                 {(() => {
                   const cardFeePct = parseFloat(cardSettings.taxaMaquinaCredito) || 0;
                   const isCredit = paymentMethod === 'credito';
-                  const cardFeeVal = isCredit ? parseFloat((total * (cardFeePct / 100)).toFixed(2)) : 0;
-                  const finalTotal = isCredit && cardSettings.repassarTaxaCredito ? (total + cardFeeVal) : total;
+                  const isMisto = paymentMethod === 'misto';
+                  const creditoVal = isMisto ? parseFloat(mistoValues.credito || 0) : 0;
+                  const cardFeeVal = isCredit 
+                    ? parseFloat((total * (cardFeePct / 100)).toFixed(2)) 
+                    : (isMisto ? parseFloat((creditoVal * (cardFeePct / 100)).toFixed(2)) : 0);
+                  const finalTotal = (isCredit || isMisto) && cardSettings.repassarTaxaCredito ? (total + cardFeeVal) : total;
                   
                   return (
                     <>
-                      {isCredit && cardFeePct > 0 ? (
+                      {(isCredit || (isMisto && creditoVal > 0)) && cardFeePct > 0 ? (
                         <>
                           <div>
                             <span className="text-[10px] text-gray-500 font-bold uppercase block">Total Original</span>
@@ -1631,10 +1638,15 @@ export default function PDV() {
                         const debito = parseFloat(mistoValues.debito || 0);
                         const credito = parseFloat(mistoValues.credito || 0);
                         const fiado = parseFloat(mistoValues.fiado || 0);
+
+                        const cardFeePct = parseFloat(cardSettings.taxaMaquinaCredito) || 0;
+                        const cardFeeVal = cardSettings.repassarTaxaCredito ? parseFloat((credito * (cardFeePct / 100)).toFixed(2)) : 0;
+                        const saleTotalWithFee = total + cardFeeVal;
+
                         const sum = dinheiro + pix + debito + credito + fiado;
-                        const rest = total - sum;
+                        const rest = saleTotalWithFee - sum;
                         const hasCash = dinheiro > 0;
-                        const changeVal = sum > total && hasCash ? parseFloat((sum - total).toFixed(2)) : 0;
+                        const changeVal = sum > saleTotalWithFee && hasCash ? parseFloat((sum - saleTotalWithFee).toFixed(2)) : 0;
 
                         return (
                           <div className="space-y-4 text-left animate-in fade-in duration-200">

@@ -1,89 +1,69 @@
-# Walkthrough - Suporte a Venda Fiada, Controle de Crédito e Modo Açougue (v1.0.4)
+# Walkthrough - Suporte a Pagamento Misto/Dividido (v1.0.5)
 
-O aplicativo **MercadoPDV** foi atualizado com sucesso para a versão **1.0.4**, trazendo o suporte a **Venda Fiada (Venda a Prazo/Pendente)**, cadastro e controle financeiro de clientes, e histórico de extratos ledger, além de consolidar o **Modo Açougue Avançado** com controle de peso bruto por categoria.
-
----
-
-## 🚀 Novidades da Versão 1.0.4
-
-### 1. 🤝 Venda Fiada no Checkout (Frente de Caixa)
-*   **5ª Forma de Pagamento:** Adicionada a opção **"Venda Fiada / Prazo"** no modal de pagamento (`F4`).
-*   **Seleção Rápida de Clientes:** Exibe um dropdown dinâmico com a lista de clientes cadastrados, mostrando instantaneamente o saldo devedor atual, o limite de crédito total e o limite disponível.
-*   **Bloqueio Inteligente de Limite:** Caso o valor da venda ultrapasse o limite de crédito disponível do cliente, o sistema exibe alertas visuais de aviso e **bloqueia fisicamente a conclusão da venda** (botão de finalização inativo com feedback de alerta), garantindo segurança total contra inadimplência excessiva.
-*   **Cupom Não Fiscal Customizado:** Ao finalizar uma venda fiada, o cupom impresso pelo Electron anexa automaticamente o **Nome do Cliente** e a **Dívida Acumulada** do cliente atualizada, oferecendo total transparência.
-
-### 2. 📊 Tela de Gerenciamento de Clientes & Contas a Receber (`Clientes.jsx`)
-Foi construída uma nova e avançada tela administrativa retaguarda com estilo **Glassmorphic** de alta qualidade:
-*   **Cards de Métricas Superiores:**
-    *   **Contas a Receber (R$):** Soma em tempo real de toda a dívida ativa de fiados na rua.
-    *   **Clientes Ativos:** Quantidade de clientes cadastrados no banco de dados.
-    *   **Utilização do Crédito (%):** Porcentagem que indica o consumo dos limites de crédito concedidos.
-*   **Tabela de Controle Detalhado:** Grade responsiva exibindo Nome, Telefone, CPF, Limite de Crédito, Saldo Devedor, Limite Disponível e ações de Extrato/Edição.
-*   **Cadastro/Edição de Clientes:** Modal intuitivo para cadastrar ou atualizar dados e limites máximos de fiado (definir `0` para conceder limite ilimitado).
-*   **Extrato estilo Ledger Bancário:** Histórico completo unificado mostrando compras a prazo (débitos) e pagamentos (créditos) com data, hora, forma e operador.
-*   **Recebimento de Fiado:** Lançamento de pagamentos diretamente pelo extrato (PIX, Dinheiro, Débito ou Crédito) com abate transacional instantâneo do saldo devedor.
-*   **Impressão de Extrato e Recibo:** Emissão de cupom impresso para o cliente comprovando o pagamento de fiado efetuado.
-
-### 3. 🥩 Modo Açougue Avançado (Melhorado v1.0.4)
-*   **Controle e Criação Direta:** Agora você pode ativar o **Modelo Açougue (Estoque por Peso Bruto)** e definir o Peso Bruto Inicial (KG) e Preço de Custo (R$/KG) **no próprio momento de criar a categoria** (sem necessidade de criar primeiro e editar depois).
-*   **Facilidade no Cadastro de Cortes:** Ao cadastrar ou editar um produto e vinculá-lo a uma categoria do tipo açougue, o campo **Estoque Inicial fica automaticamente desativado e travado em 0**, com um aviso explicativo: *não necessita de estoque individual*. O lojista preenche apenas o Custo e a Venda do corte! O sistema também trava automaticamente o Tipo de Produto como `KG` para máxima consistência.
-*   **Entrada e Perda Centralizada:** O lojista lança as entradas da carcaça/lote inteiro diretamente na categoria (ex: entrada de `60,000 kg` de *Corte Traseiro*). As vendas e descartes (perdas) lançadas no sistema abatem transacionalmente desse estoque centralizado.
-*   **Estoque Dinâmico Compartilhado:** Cortes vinculados (ex: *Picanha*, *Alcatra*) mostram o peso da carcaça de forma dinâmica com badge explicativo `Lote (Compartilhado)`.
-*   **Relatório de Rendimento de Lote:** Exibe o Total Recebido, Peso Comercializado, Descartes/Aparas registradas como perdas, Faturamento bruto gerado e a porcentagem exata de **Aproveitamento Real (%)** da carcaça.
-*   **Destaque Visual:** O botão de salvar no modal de configuração de categoria foi renomeado para **"Atualizar Categoria"** e destacado com gradiente de destaque premium (`purple to brand-accent`).
+O aplicativo **MercadoPDV** foi atualizado com sucesso para a versão **1.0.5**, trazendo uma das funcionalidades mais solicitadas por operadores de caixa: o suporte completo a **Pagamento Misto / Dividido (Split Payment)**. Agora, os clientes podem pagar por uma única compra utilizando múltiplos métodos de pagamento combinados (ex: parte em PIX, parte em Dinheiro, parte no Débito, e o restante anotado no Fiado).
 
 ---
 
-## 🛠️ Como Utilizar Operacionalmente a Venda Fiada
+## 🚀 Novidades da Versão 1.0.5
 
-1.  **Cadastrando um Cliente:**
-    *   Vá na barra lateral retaguarda e clique em **"Clientes & Fiado"**.
-    *   Clique em **"+ Novo Cliente"**. Preencha Nome, Telefone, CPF e defina o Limite de Crédito (ex: `R$ 200,00`). Salve.
-2.  **Efetuando a Venda Fiada no Caixa:**
-    *   Adicione os itens ao carrinho no PDV.
-    *   Pressione **F4** para abrir o pagamento.
-    *   Selecione **"Venda Fiada / Prazo"**.
-    *   No dropdown, selecione o cliente (ex: *Felipe Gondim*). O sistema exibirá o saldo devedor e o limite disponível dele.
-    *   Se estiver dentro do limite, pressione **F12** ou clique em **Finalizar**. O cupom impresso mostrará o fiado e o saldo devedor acumulado.
-3.  **Recebendo Pagamento de Fiado:**
-    *   Vá na tela de **Clientes & Fiado** e clique em **"Visualizar Extrato"** no cliente desejado.
-    *   Observe a compra do PDV lançada na lista de transações.
-    *   No topo do extrato, insira o valor pago pelo cliente (ex: `R$ 50,00`), selecione a forma de recebimento (ex: *PIX*) e clique em **"Lançar Recebimento"**.
-    *   O saldo devedor cairá instantaneamente de `R$ 200` para `R$ 150`, o extrato será atualizado e você poderá clicar em **"Imprimir Recibo"** para emitir o comprovante impresso do cliente.
+### 1. 🔀 Pagamento Misto / Dividido (Frente de Caixa)
+* **Novo Modo de Checkout:** Adicionada a opção **"Misto / Dividido"** no modal de pagamento (`F4`).
+* **Painel Dinâmico de Rateio:** Ao selecionar o modo Misto, um painel intuitivo e moderno se abre exibindo entradas numéricas independentes para cada método de pagamento suportado:
+  * 💵 **Dinheiro**
+  * 📱 **PIX QR Code**
+  * 💳 **Cartão de Débito**
+  * 💳 **Cartão de Crédito**
+  * 🤝 **Fiado (A Prazo)** (com seleção dinâmica de cliente e validação de limite)
+* **Cálculos e Troco em Tempo Real:** O operador visualiza o total da compra, a soma já preenchida dos pagamentos, o **"Valor Restante"** e o **"Troco"** dinâmico (calculado exclusivamente sobre o excesso pago em Dinheiro).
+* **Validações de Finalização Robustas:**
+  * O botão de finalização só é ativado quando o valor total preenchido é igual ou superior ao total da compra.
+  * Validação proporcional do limite de crédito do cliente caso o método "Fiado" seja selecionado na divisão de pagamentos.
+  * Bloqueio físico de troco se a soma sem dinheiro for superior ao total (o troco é garantido apenas se houver pagamento físico em espécie).
 
----
+### 2. 🛡️ Padrão "Virtual Split Payment" no Banco de Dados
+Para contornar as restrições rígidas do banco de dados SQLite (como a restrição `CHECK` na coluna `forma_pagamento` que aceita apenas valores fixos individuais) sem quebrar a retrocompatibilidade com relatórios, implementamos uma arquitetura virtual inteligente:
+* **Agrupamento por `split_grupo_id`:** Vendas mistas são registradas no banco como múltiplos registros individuais contendo o mesmo identificador exclusivo `split_grupo_id`.
+* **Consolidação Automática:** Métodos como `getVendas` e `getVendaDetalhes` foram atualizados para consolidar essas linhas agrupadas, retornando-as como uma única transação unificada do tipo `"misto"`.
+* **Segurança do Caixa:** A movimentação de estoque e a contabilidade do fechamento de caixa continuam 100% corretas, já que o dinheiro da gaveta e os faturamentos eletrônicos são mapeados individualmente aos seus respectivos métodos.
+* **Resiliência do Dashboard:** As queries de indicadores (`getDashboardStats`) agora utilizam `COUNT(DISTINCT COALESCE(split_grupo_id, id))` para garantir que a venda conte apenas uma vez, mantendo os gráficos de volume de vendas perfeitamente íntegros.
 
-## 🛠️ Correção e Resiliência (Hotfix de Banco de Dados)
+### 3. 🧾 Impressão de Cupom Térmico Detalhado
+Ao concluir uma venda dividida, o cupom não fiscal térmico impresso lista a discriminação exata de cada método de pagamento utilizado, com o abatimento correto de descontos e indicação clara de troco em dinheiro (se houver). 
 
-Durante o desenvolvimento e migração do banco de dados na versão **1.0.4**, identificamos e corrigimos dois comportamentos sutis no banco de dados SQLite:
-
-### 1. 🔗 Correção de Chaves Estrangeiras nas Migrações de Vendas
-*   **Problema:** Ao renomear a tabela `vendas` para `vendas_old` com chaves estrangeiras ativas, a tabela filha `itens_venda` teve sua definição de chave estrangeira automaticamente atualizada pelo SQLite para referenciar `vendas_old`. Ao dropar a tabela `vendas_old`, a referência da chave estrangeira foi corrompida, resultando no erro `SqliteError: no such table: main.vendas_old`.
-*   **Solução:** 
-    1. **Desativação Temporária de Chaves Estrangeiras:** O código de auto-migração em `database.js` foi corrigido para desativar temporariamente as restrições (`PRAGMA foreign_keys = OFF;`) durante a alteração das tabelas, impedindo que o SQLite reescreva as chaves estrangeiras.
-    2. **Mecanismo de Autocura (Self-Healing):** Implementamos uma rotina resiliente de autocura que verifica se a tabela `itens_venda` está corrompida (referenciando `vendas_old`) e reconstrói a tabela dinamicamente com a chave estrangeira apontando corretamente para `vendas(id)`.
-    3. **Cura de Bancos Existentes:** Rodamos scripts de correção em todos os bancos de dados ativos no sistema (`AppData\Local\Programs`, `AppData\Roaming`, e pasta de desenvolvimento), restabelecendo o perfeito funcionamento de forma automática e transparente.
-
-### 2. ❌ Exclusão Segura de Produtos com Histórico de Vendas (Hotfix da foto)
-*   **Problema:** Ao tentar excluir um produto que já havia sido vendido anteriormente, o SQLite lançava a exceção `FOREIGN KEY constraint failed`. Isso acontecia porque a tabela de itens vendidos (`itens_venda`) possui uma chave estrangeira referenciando a tabela de produtos (`produtos`). Deletar o produto violaria a integridade referencial do banco.
-*   **Solução:**
-    1. **Nulidade Transacional:** Atualizamos a lógica em `excluirProduto` (`database.js`). Agora, antes de deletar o produto da tabela `produtos`, o sistema define dinamicamente `produto_id = NULL` em todas as linhas correspondentes da tabela `itens_venda` dentro de uma transação SQLite segura.
-    2. **Resiliência nos Relatórios e Históricos:** Ajustamos a API `getVendaDetalhes` para mapear os itens vendidos. Se um produto for excluído (`produto_id` nulo), o sistema renderiza automaticamente `'Produto Excluído'` no nome do produto e `'N/A'` no código de barras, impedindo falhas na tela de relatórios ou impressão de cupons.
-    3. **Resiliência no Dashboard:** Atualizamos a query de cálculo de lucro real in `getDashboardStats` para usar `LEFT JOIN` com `COALESCE(p.preco_custo, 0)`. Isso garante que as vendas históricas de produtos excluídos ainda sejam computadas perfeitamente no faturamento e lucro total exibidos.
-
-### 3. ⚖️ Integração Avançada de Balanças Toledo Prix Wi-Fi (Cenários A e B)
-*   **Renovação UI/UX de Configuração (`Config.jsx`):** O painel de configurações de balança foi completamente remodelado. Introduzimos um seletor dinâmico de **Tipo de Conexão** com três opções: *Simulação*, *Porta Serial (COM)* e *Rede Sem Fio Wi-Fi / Ethernet (TCP/IP)*. Se Rede for selecionada, exibe-se um campo de texto inteligente para inserção do IP e Porta do conversor de rede da balança (ex: `192.168.1.250:1001`), perfeitamente compatível com o banco de dados.
-*   **Driver TCP Socket Nativo (`main.js`):** O handler IPC `balanca:lerPeso` agora realiza auto-detecção: se a porta configurada contiver formatos de endereço IP (ex. `.` ou `:`), ele desvia do SerialPort e abre um canal TCP direto via `net.createConnection`. Envia o byte `0x05` (ENQ), lê a resposta contendo a pesagem e a decodifica de forma assíncrona.
-*   **Mecanismo de Resiliência no Caixa (Failsafe):** Para impedir que falhas de rede local ou balanças desligadas travem a tela de vendas do operador, o driver de rede opera com um **timeout de 1,5 segundos**. Se excedido, ele entra em contingência automática, fornecendo o peso de simulação/manual e informando o operador sobre a indisponibilidade temporária.
-*   **Guia Rápido Glassmorphic na Interface:** Adicionado um card explicativo duplo de alta fidelidade visual que ensina passo-a-passo como configurar e cadastrar produtos para o **Cenário A (Pesagem Externa com Etiqueta EAN-13 iniciando com 2)** e o **Cenário B (Pesagem Direta no Caixa via IP/Porta TCP)**, instruindo o lojista de forma clara.
+### 4. 📊 Auditoria Completa nos Relatórios
+* **Visualização Unificada:** A tabela de auditoria de vendas lista as transações mistas sob o tipo `"MISTO / DIVIDIDO"`.
+* **Detalhamento no Modal:** Ao abrir os detalhes de uma venda mista, o sistema exibe um card com os valores específicos pagos in cada modalidade.
+* **Segunda Via Segura:** O operador pode reimprimir a segunda via do cupom a qualquer momento, mantendo a discriminação detalhada dos pagamentos originais.
 
 ---
 
-## 📦 Detalhes de Instalação e Distribuição (v1.0.4 - Hotfix & Balanças)
+## 🛠️ Paridade de Ambientes & Publicação
 
-*   **Instalador de Produção Compilado:**
-    *   [MercadoPDV Setup 1.0.4.exe](file:///C:/Users/Felipe%20Gondim/MecadoPDV/release/MercadoPDV%20Setup%201.0.4.exe)
-*   **Paridade Total de Ambientes:**
-    *   Workspace Principal: `C:\Users\Felipe Gondim\MecadoPDV` - **100% Compilado, Testado e Comitado**
-    *   Workspace Secundário: `C:\Users\Felipe Gondim\Documents\MecadoPDV` - **100% Sincronizado e Idêntico**
-*   **Distribuição Automática:** As alterações foram commitadas e empurradas via `git push` para o repositório GitHub (`main`). O instalador atualizado já está no repositório pronto para distribuição de forma limpa.
+Durante o ciclo de finalização da versão **1.0.5**, realizamos uma auditoria de integridade para garantir 100% de paridade entre os dois diretórios de workspace do usuário.
+
+### 🔄 Correções Efetuadas para Paridade Total:
+1. **`database.js` (Estoque KG):** Corrigido o mirror para usar `newCatStock = quantidade;` ao invés de `parseInt(quantidade)` no fluxo de ajuste de categoria, prevenindo o truncamento de estoques com peso decimal (KG).
+2. **`database.js` (Histórico de Estoque):** Alinhado o nome da propriedade para usar `data_movimentacao: dataVenda` no fluxo de fallback JSON, garantindo uniformidade com as queries SQLite.
+3. **`PDV.jsx` (Traduções e Textos):** Padronizada a grafia em português de `"sessão ativa"` (estava `"sessão activa"`) e corrigida a tradução de `"produto"` (estava `"product"`) nas mensagens da tela inicial do caixa.
+4. **`PDV.jsx` (Identação do Autocomplete):** Corrigida a identação na renderização do dropdown de busca do caixa para remover espaços extras e garantir paridade caractere por caractere.
+5. **`Relatorios.jsx` (Cupom Fechamento):** Corrigida a interpolação da data de abertura no comprovante impresso de fechamento, alterando de `{new Date(...)}` para `${new Date(...)}` dentro do template literal.
+
+### 📦 Entrega e Builds:
+* **Renderer Build:** Compilado e gerado os bundles estáticos de frontend com `npm run build:renderer`.
+* **Electron Installer:** Empacotado a build final em formato de instalador executável:
+  * Path: `release/MercadoPDV Setup 1.0.5.exe` (tamanho: 81.16 MB)
+* **Sincronização Remota:** Todos os arquivos foram adicionados e comitados com sucesso, e empurrados diretamente para o repositório GitHub oficial (`main -> main`).
+
+---
+
+## 🏗️ Guia de Teste Operacional (Fluxo Misto)
+
+1. **Inicie o Caixa:** Abra o PDV e realize a abertura de turno padrão.
+2. **Adicione Itens:** Passe alguns itens no scanner ou busque-os pelo autocomplete.
+3. **Abra o Modal de Pagamento:** Pressione `F4`.
+4. **Selecione Misto:** Pressione a opção **"Misto / Dividido"**.
+5. **Preencha os Campos:** 
+   * Se a compra deu R$ 50,00, preencha R$ 20,00 em PIX, R$ 20,00 no Cartão de Débito, e R$ 15,00 em Dinheiro.
+   * Observe que o sistema calcula R$ 5,00 de troco em dinheiro (já que a soma deu R$ 55,00 e o excesso de R$ 5,00 foi pago em espécie).
+6. **Finalize a Venda:** Pressione `F12` ou clique em **Finalizar Venda**. O cupom térmico impresso sairá com a divisão correta de pagamentos.
+7. **Verifique os Relatórios:** Acesse o menu **Relatórios** na barra lateral e comprove que a venda está listada de forma unificada e seus detalhes de pagamento estão descritos com total precisão.
