@@ -632,6 +632,43 @@ export default function PDV() {
     }
   };
 
+  const handlePrintPixQrCode = async () => {
+    if (!pixQrCodeUrl) return;
+    const valor = paymentMethod === 'pix' ? total : parseFloat(mistoValues.pix || 0);
+    const printHtml = `
+      <html>
+        <head>
+          <style>
+            body { font-family: 'Courier New', Courier, monospace; font-size: 11px; margin: 0; padding: 10px; color: black; text-align: center; }
+            .bold { font-weight: bold; }
+            .divider { border-top: 1px dashed black; margin: 5px 0; }
+            .qr-container { text-align: center; margin: 15px 0; }
+            img { width: 180px; height: 180px; display: inline-block; }
+          </style>
+        </head>
+        <body>
+          <span class="bold">PAGAMENTO PIX</span><br/>
+          <span>Mercado & Conveniência</span><br/>
+          <div class="divider"></div>
+          <span class="bold" style="font-size: 14px;">VALOR: R$ ${valor.toFixed(2)}</span><br/>
+          <div class="qr-container">
+            <img src="${pixQrCodeUrl}" />
+          </div>
+          <div class="divider"></div>
+          <span>Aponte a câmera do seu banco</span><br/>
+          <span>para pagar</span>
+        </body>
+      </html>
+    `;
+    try {
+      await api.print.imprimirCupom(printHtml);
+      playBeep('success');
+    } catch (err) {
+      console.error("Erro ao imprimir QR Code:", err);
+      showAlert("Erro ao enviar QR Code para a impressora: " + err.message);
+    }
+  };
+
   const focusBarcode = () => {
     setTimeout(() => {
       barcodeInputRef.current?.focus();
@@ -1477,112 +1514,129 @@ export default function PDV() {
           ======================================================== */}
       {showPaymentModal && (
         <div className="absolute inset-0 bg-brand-dark/80 backdrop-blur-sm flex items-center justify-center z-40 select-none">
-          <div className="w-full max-w-2xl bg-brand-card border border-brand-border rounded-3xl p-8 shadow-2xl flex animate-in zoom-in-95 duration-150">
+          <div className="flex items-stretch space-x-6 max-w-4xl w-full mx-4 justify-center animate-in zoom-in-95 duration-150">
             
-            {/* Left: Payments selection */}
-            <div className="flex-1 pr-6 border-r border-brand-border/50 flex flex-col justify-between">
-              <div>
-                <h3 className="text-base font-bold text-white mb-6">Forma de Pagamento</h3>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setPaymentMethod('dinheiro')}
-                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
-                      paymentMethod === 'dinheiro'
-                        ? 'border-brand-accent bg-brand-accent/10 text-white'
-                        : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
-                    }`}
-                  >
-                    <DollarSign size={24} className="mb-2" />
-                    <span className="text-xs font-bold uppercase">Dinheiro</span>
-                  </button>
-
-                  <button
-                    onClick={() => setPaymentMethod('pix')}
-                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
-                      paymentMethod === 'pix'
-                        ? 'border-brand-accent bg-brand-accent/10 text-white'
-                        : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
-                    }`}
-                  >
-                    <QrCode size={24} className="mb-2" />
-                    <span className="text-xs font-bold uppercase">PIX QR Code</span>
-                  </button>
-
-                  <button
-                    onClick={() => setPaymentMethod('debito')}
-                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
-                      paymentMethod === 'debito'
-                        ? 'border-brand-accent bg-brand-accent/10 text-white'
-                        : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
-                    }`}
-                  >
-                    <CreditCard size={24} className="mb-2" />
-                    <span className="text-xs font-bold uppercase">Cartão Débito</span>
-                  </button>
-
-                  <button
-                    onClick={() => setPaymentMethod('credito')}
-                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
-                      paymentMethod === 'credito'
-                        ? 'border-brand-accent bg-brand-accent/10 text-white'
-                        : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
-                    }`}
-                  >
-                    <CreditCard size={24} className="mb-2" />
-                    <span className="text-xs font-bold uppercase">Cartão Crédito</span>
-                  </button>
-
-                  <button
-                    onClick={() => setPaymentMethod('fiado')}
-                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
-                      paymentMethod === 'fiado'
-                        ? 'border-brand-accent bg-brand-accent/10 text-white'
-                        : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
-                    }`}
-                  >
-                    <User size={24} className="mb-2" />
-                    <span className="text-xs font-bold uppercase">Fiado / Prazo</span>
-                  </button>
-
-                  <button
-                    onClick={() => setPaymentMethod('misto')}
-                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
-                      paymentMethod === 'misto'
-                        ? 'border-brand-accent bg-brand-accent/10 text-white'
-                        : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-1.5 justify-center mb-2">
-                      <DollarSign size={18} className="text-brand-accent" />
-                      <QrCode size={18} className="text-brand-success" />
-                    </div>
-                    <span className="text-xs font-bold uppercase">Misto Dividido</span>
-                  </button>
+            {/* Left Panel: Big QR Code for Client (visible when PIX is active in pix or misto mode) */}
+            {((paymentMethod === 'pix') || (paymentMethod === 'misto' && parseFloat(mistoValues.pix || 0) > 0)) && (
+              <div className="w-80 bg-brand-card border border-brand-border rounded-3xl p-6 shadow-2xl flex flex-col justify-between items-center text-center animate-in slide-in-from-left-4 duration-300">
+                <div className="w-full">
+                  <span className="text-[10px] text-brand-success font-extrabold uppercase tracking-widest block mb-1">QR Code de Pagamento</span>
+                  <h4 className="text-sm font-bold text-white">
+                    {paymentMethod === 'pix' ? 'Total da Venda' : 'Parcela PIX Misto'}
+                  </h4>
+                  <span className="text-3xl font-black text-brand-success block mt-1 tracking-tight">
+                    R$ {paymentMethod === 'pix' ? total.toFixed(2) : parseFloat(mistoValues.pix || 0).toFixed(2)}
+                  </span>
+                  <p className="text-[10px] text-gray-400 mt-2 leading-relaxed font-semibold">
+                    Aponte a câmera do celular para pagar esta parcela.
+                  </p>
                 </div>
-
-                {/* PIX QR Code card when PIX portion in Misto mode is positive */}
-                {paymentMethod === 'misto' && parseFloat(mistoValues.pix || 0) > 0 && (
-                  <div className="mt-4 p-3.5 bg-brand-dark/40 border border-brand-border/60 rounded-2xl flex items-center justify-between animate-in slide-in-from-bottom-2 duration-200">
-                    <div className="flex-1 pr-3 text-left">
-                      <span className="text-[10px] text-brand-success font-extrabold uppercase tracking-widest block leading-none mb-1">PIX QR Code Dividido</span>
-                      <span className="text-lg font-black text-white">R$ {parseFloat(mistoValues.pix).toFixed(2)}</span>
-                      <p className="text-[10px] text-gray-400 mt-1.5 leading-normal font-semibold">
-                        Aponte a câmera do celular para pagar esta parcela.
-                      </p>
+                
+                <div className="my-4 p-4 bg-white rounded-2xl shadow-xl shadow-black/20 flex items-center justify-center border-4 border-brand-success/20">
+                  {pixQrCodeUrl ? (
+                    <img src={pixQrCodeUrl} alt="PIX QR Code" className="w-44 h-44 block select-text" />
+                  ) : (
+                    <div className="w-44 h-44 bg-gray-100 flex items-center justify-center text-xs text-gray-400 font-bold rounded-xl animate-pulse">
+                      Gerando QR Code...
                     </div>
-                    <div className="p-2 bg-white rounded-xl shrink-0 shadow-lg shadow-black/10">
-                      {pixQrCodeUrl ? (
-                        <img src={pixQrCodeUrl} alt="PIX QR Code" className="w-20 h-20 block select-text" />
-                      ) : (
-                        <div className="w-20 h-20 bg-gray-100 flex items-center justify-center text-[10px] text-gray-400 font-bold rounded-lg animate-pulse">
-                          Gerando...
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={handlePrintPixQrCode}
+                  className="w-full bg-brand-success/10 hover:bg-brand-success/20 border border-brand-success/30 hover:border-brand-success/50 text-brand-success font-bold py-3.5 px-4 rounded-xl text-xs transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <span>🖨️ Imprimir QR Code</span>
+                </button>
               </div>
+            )}
+
+            {/* Central Modal Content */}
+            <div className="w-full max-w-2xl bg-brand-card border border-brand-border rounded-3xl p-8 shadow-2xl flex">
+              
+              {/* Left: Payments selection */}
+              <div className="flex-1 pr-6 border-r border-brand-border/50 flex flex-col justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-white mb-6">Forma de Pagamento</h3>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setPaymentMethod('dinheiro')}
+                      className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
+                        paymentMethod === 'dinheiro'
+                          ? 'border-brand-accent bg-brand-accent/10 text-white'
+                          : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
+                      }`}
+                    >
+                      <DollarSign size={24} className="mb-2" />
+                      <span className="text-xs font-bold uppercase">Dinheiro</span>
+                    </button>
+
+                    <button
+                      onClick={() => setPaymentMethod('pix')}
+                      className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
+                        paymentMethod === 'pix'
+                          ? 'border-brand-accent bg-brand-accent/10 text-white'
+                          : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
+                      }`}
+                    >
+                      <QrCode size={24} className="mb-2" />
+                      <span className="text-xs font-bold uppercase">PIX QR Code</span>
+                    </button>
+
+                    <button
+                      onClick={() => setPaymentMethod('debito')}
+                      className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
+                        paymentMethod === 'debito'
+                          ? 'border-brand-accent bg-brand-accent/10 text-white'
+                          : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
+                      }`}
+                    >
+                      <CreditCard size={24} className="mb-2" />
+                      <span className="text-xs font-bold uppercase">Cartão Débito</span>
+                    </button>
+
+                    <button
+                      onClick={() => setPaymentMethod('credito')}
+                      className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
+                        paymentMethod === 'credito'
+                          ? 'border-brand-accent bg-brand-accent/10 text-white'
+                          : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
+                      }`}
+                    >
+                      <CreditCard size={24} className="mb-2" />
+                      <span className="text-xs font-bold uppercase">Cartão Crédito</span>
+                    </button>
+
+                    <button
+                      onClick={() => setPaymentMethod('fiado')}
+                      className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
+                        paymentMethod === 'fiado'
+                          ? 'border-brand-accent bg-brand-accent/10 text-white'
+                          : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
+                      }`}
+                    >
+                      <User size={24} className="mb-2" />
+                      <span className="text-xs font-bold uppercase">Fiado / Prazo</span>
+                    </button>
+
+                    <button
+                      onClick={() => setPaymentMethod('misto')}
+                      className={`flex flex-col items-center justify-center p-4 rounded-2xl border text-center transition-all ${
+                        paymentMethod === 'misto'
+                          ? 'border-brand-accent bg-brand-accent/10 text-white'
+                          : 'border-brand-border bg-brand-dark/40 text-gray-400 hover:bg-brand-border/20'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-1.5 justify-center mb-2">
+                        <DollarSign size={18} className="text-brand-accent" />
+                        <QrCode size={18} className="text-brand-success" />
+                      </div>
+                      <span className="text-xs font-bold uppercase">Misto Dividido</span>
+                    </button>
+                  </div>
+                </div>
 
               {/* Action buttons */}
               <div className="flex space-x-3 mt-8">
@@ -1678,17 +1732,13 @@ export default function PDV() {
                         </div>
                       )}
 
-                      {/* PIX Option: Displays QR Code */}
+                      {/* PIX Option */}
                       {paymentMethod === 'pix' && (
-                        <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-white border border-gray-200">
-                          {pixQrCodeUrl ? (
-                            <img src={pixQrCodeUrl} alt="PIX QR Code" className="w-40 h-40 shrink-0" />
-                          ) : (
-                            <div className="w-40 h-40 flex items-center justify-center text-gray-400 bg-gray-100 rounded-lg text-xs font-semibold">
-                              Gerando QR Code...
-                            </div>
-                          )}
-                          <span className="text-[9px] text-gray-800 font-bold mt-2 uppercase tracking-wide">Pague com PIX estático</span>
+                        <div className="p-4 rounded-xl bg-brand-dark/40 border border-brand-border/60 text-center flex flex-col items-center justify-center space-y-2 py-8 animate-in fade-in duration-200">
+                          <QrCode className="h-8 w-8 text-brand-success animate-pulse" />
+                          <p className="text-xs text-gray-400 font-bold leading-normal">
+                            QR Code gerado na lateral para o cliente.
+                          </p>
                         </div>
                       )}
 
@@ -1994,9 +2044,9 @@ export default function PDV() {
                 Pressione F12 para imprimir
               </div>
             </div>
-
           </div>
         </div>
+      </div>
       )}
 
       {/* ========================================================
