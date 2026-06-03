@@ -78,6 +78,68 @@ export default function Clientes() {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('dinheiro'); // dinheiro, pix, debito, credito
 
+  const getReceiptHeaderHtml = (title = 'CUPOM NAO FISCAL') => {
+    const saved = localStorage.getItem('pdv_settings');
+    let logoHtml = '';
+    let nome = 'MERCADO & CONVENIENCIA';
+    let endereco = 'Rua do Mercado, 123 - Centro';
+    let telefone = '';
+    let cnpj = 'CNPJ: 12.345.678/0001-99';
+
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.logoBase64) {
+          logoHtml = `<img src="${parsed.logoBase64}" style="max-height: 60px; max-width: 150px; display: block; margin: 0 auto 8px auto; object-fit: contain;" /><br/>`;
+        }
+        if (parsed.cabecalhoNome?.trim()) {
+          nome = parsed.cabecalhoNome.trim().toUpperCase();
+        }
+        if (parsed.cabecalhoEndereco?.trim()) {
+          endereco = parsed.cabecalhoEndereco.trim();
+        }
+        if (parsed.cabecalhoTelefone?.trim()) {
+          telefone = parsed.cabecalhoTelefone.trim();
+        }
+      } catch (e) {
+        console.error("Erro ao ler pdv_settings", e);
+      }
+    }
+
+    return `
+      <div class="text-center">
+        ${logoHtml}
+        <span class="bold">${nome}</span><br/>
+        <span>${endereco}</span><br/>
+        ${telefone ? `<span>Telefone: ${telefone}</span><br/>` : `<span>${cnpj}</span><br/>`}
+        <div class="divider"></div>
+        <span class="bold">${title}</span>
+      </div>
+    `;
+  };
+
+  const getReceiptFooterHtml = (operador) => {
+    const saved = localStorage.getItem('pdv_settings');
+    let msg = 'Obrigado pela preferencia!';
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.rodapeMensagem?.trim()) {
+          msg = parsed.rodapeMensagem.trim();
+        }
+      } catch (e) {
+        console.error("Erro ao ler rodape", e);
+      }
+    }
+    return `
+      <div class="divider"></div>
+      <div class="text-center" style="margin-top:10px;">
+        <span class="bold">${msg}</span><br/>
+        <span>Operador: ${operador}</span>
+      </div>
+    `;
+  };
+
   const fetchClientes = async () => {
     try {
       const data = await api.db.getClientes();
@@ -204,13 +266,7 @@ export default function Clientes() {
               </style>
             </head>
             <body>
-              <div class="text-center">
-                <span class="bold">MERCADO & CONVENIENCIA</span><br/>
-                <span>Rua do Mercado, 123 - Centro</span><br/>
-                <div class="divider"></div>
-                <span class="bold">COMPROVANTE DE PAGAMENTO</span><br/>
-                <span>Recebido em ${new Date().toLocaleString('pt-BR')}</span>
-              </div>
+              ${getReceiptHeaderHtml(`COMPROVANTE DE PAGAMENTO<br/>Recebido em ${new Date().toLocaleString('pt-BR')}`)}
               <div class="divider"></div>
               
               <div class="row">
@@ -242,11 +298,7 @@ export default function Clientes() {
                 <span>R$ ${res.novoSaldo.toFixed(2)}</span>
               </div>
               
-              <div class="divider"></div>
-              <div class="text-center margin-top">
-                <span class="bold">Obrigado! Obrigado pelo pagamento.</span><br/>
-                <span>Operador: ${user.name}</span>
-              </div>
+              ${getReceiptFooterHtml(user.name)}
             </body>
           </html>
         `;
@@ -286,11 +338,7 @@ export default function Clientes() {
           </style>
         </head>
         <body>
-          <div class="text-center">
-            <span class="bold">MERCADO & CONVENIENCIA</span><br/>
-            <span>Extrato de Conta de Fiado</span><br/>
-            <span>Gerado em ${new Date().toLocaleString('pt-BR')}</span>
-          </div>
+          ${getReceiptHeaderHtml(`Extrato de Conta de Fiado<br/>Gerado em ${new Date().toLocaleString('pt-BR')}`)}
           <div class="divider"></div>
           
           <div class="row">

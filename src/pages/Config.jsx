@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, QrCode, Save, Building2, MapPin, Percent, CheckCircle2, Printer, ShieldAlert, FolderHeart, Scale, Award, Lock, ShieldCheck, Copy, Check } from 'lucide-react';
+import { Settings, QrCode, Save, Building2, MapPin, Percent, CheckCircle2, Printer, ShieldAlert, FolderHeart, Scale, Award, Lock, ShieldCheck, Copy, Check, Upload, Trash2, Image } from 'lucide-react';
 import useLicenseStore from '../store/useLicenseStore';
 import { validarLicencaLocal, salvarChaveLicenca } from '../services/licenca';
 
@@ -47,6 +47,7 @@ export default function Config() {
     cabecalhoTelefone: '',
     cabecalhoEndereco: '',
     rodapeMensagem: '',
+    logoBase64: '',
     backupFolder: '',
     backupAoFechar: false,
     balancaAtiva: false,
@@ -83,6 +84,7 @@ export default function Config() {
           cabecalhoTelefone: parsed.cabecalhoTelefone || '',
           cabecalhoEndereco: parsed.cabecalhoEndereco || '',
           rodapeMensagem: parsed.rodapeMensagem || '',
+          logoBase64: parsed.logoBase64 || '',
           backupFolder: parsed.backupFolder || '',
           backupAoFechar: parsed.backupAoFechar || false,
           balancaAtiva: parsed.balancaAtiva !== undefined ? parsed.balancaAtiva : false,
@@ -112,6 +114,25 @@ export default function Config() {
         : '192.168.1.250:1001';
       setSettings(prev => ({ ...prev, balancaPorta: defaultIp }));
     }
+  };
+
+  const handleLogoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 1024 * 1024) {
+        alert("A imagem é muito grande. Por favor, selecione uma imagem menor que 1MB.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setSettings(prev => ({ ...prev, logoBase64: event.target.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setSettings(prev => ({ ...prev, logoBase64: '' }));
   };
 
   const handleSave = (e) => {
@@ -284,6 +305,52 @@ export default function Config() {
                 onChange={(e) => setSettings({ ...settings, rodapeMensagem: e.target.value })}
                 className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none transition-all"
               />
+            </div>
+          </div>
+
+          {/* Logotipo da Empresa */}
+          <div className="space-y-2 pt-4 border-t border-brand-border/40 mt-4">
+            <label className="text-xs font-bold text-gray-400 uppercase flex items-center space-x-1.5">
+              <Image size={12} className="text-gray-500" />
+              <span>Logotipo da Empresa (Cupom Térmico)</span>
+            </label>
+            <div className="flex items-center space-x-4 bg-brand-dark/50 p-4 rounded-2xl border border-brand-border/40">
+              {settings.logoBase64 ? (
+                <div className="relative group shrink-0">
+                  <img 
+                    src={settings.logoBase64} 
+                    alt="Logo Preview" 
+                    className="h-16 w-32 object-contain bg-white rounded-xl p-1 border border-brand-border"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRemoveLogo}
+                    className="absolute -top-2 -right-2 bg-brand-danger text-white p-1.5 rounded-full hover:bg-red-600 transition-colors shadow-md flex items-center justify-center"
+                    title="Remover logotipo"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ) : (
+                <div className="h-16 w-32 border border-dashed border-brand-border rounded-xl flex items-center justify-center text-gray-600 shrink-0">
+                  <Image size={24} />
+                </div>
+              )}
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center space-x-2">
+                  <label className="cursor-pointer bg-brand-border/60 hover:bg-brand-border hover:text-white text-gray-300 text-xs font-bold px-4 py-2 rounded-xl border border-brand-border/40 transition-all flex items-center space-x-1.5">
+                    <Upload size={12} />
+                    <span>Selecionar Imagem</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleLogoChange} 
+                      className="hidden" 
+                    />
+                  </label>
+                </div>
+                <p className="text-[10px] text-gray-500 font-medium">Recomendado: imagem horizontal com fundo branco ou transparente, formato PNG/JPG (máx. 1MB).</p>
+              </div>
             </div>
           </div>
         </div>

@@ -29,6 +29,68 @@ export default function Relatorios() {
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [sessionSearchTerm, setSessionSearchTerm] = useState('');
 
+  const getReceiptHeaderHtml = (title = 'CUPOM NAO FISCAL') => {
+    const saved = localStorage.getItem('pdv_settings');
+    let logoHtml = '';
+    let nome = 'MERCADO & CONVENIENCIA';
+    let endereco = 'Rua do Mercado, 123 - Centro';
+    let telefone = '';
+    let cnpj = 'CNPJ: 12.345.678/0001-99';
+
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.logoBase64) {
+          logoHtml = `<img src="${parsed.logoBase64}" style="max-height: 60px; max-width: 150px; display: block; margin: 0 auto 8px auto; object-fit: contain;" /><br/>`;
+        }
+        if (parsed.cabecalhoNome?.trim()) {
+          nome = parsed.cabecalhoNome.trim().toUpperCase();
+        }
+        if (parsed.cabecalhoEndereco?.trim()) {
+          endereco = parsed.cabecalhoEndereco.trim();
+        }
+        if (parsed.cabecalhoTelefone?.trim()) {
+          telefone = parsed.cabecalhoTelefone.trim();
+        }
+      } catch (e) {
+        console.error("Erro ao ler pdv_settings", e);
+      }
+    }
+
+    return `
+      <div class="text-center">
+        ${logoHtml}
+        <span class="bold">${nome}</span><br/>
+        <span>${endereco}</span><br/>
+        ${telefone ? `<span>Telefone: ${telefone}</span><br/>` : `<span>${cnpj}</span><br/>`}
+        <div class="divider"></div>
+        <span class="bold">${title}</span>
+      </div>
+    `;
+  };
+
+  const getReceiptFooterHtml = (operador) => {
+    const saved = localStorage.getItem('pdv_settings');
+    let msg = 'Obrigado pela preferencia!';
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.rodapeMensagem?.trim()) {
+          msg = parsed.rodapeMensagem.trim();
+        }
+      } catch (e) {
+        console.error("Erro ao ler rodape", e);
+      }
+    }
+    return `
+      <div class="divider"></div>
+      <div class="text-center" style="margin-top:10px;">
+        <span class="bold">${msg}</span><br/>
+        <span>Operador: ${operador}</span>
+      </div>
+    `;
+  };
+
   const loadVendas = async () => {
     try {
       const data = await api.sales.getVendas();
@@ -94,14 +156,7 @@ export default function Relatorios() {
           </style>
         </head>
         <body>
-          <div class="text-center">
-            <span class="bold">MERCADO & CONVENIENCIA</span><br/>
-            <span>Rua do Mercado, 123 - Centro</span><br/>
-            <span>CNPJ: 12.345.678/0001-99</span><br/>
-            <div class="divider"></div>
-            <span class="bold">SEGUNDA VIA - CUPOM NAO FISCAL</span><br/>
-            <span>Venda #${venda.id} - ${new Date(venda.data_venda).toLocaleString('pt-BR')}</span>
-          </div>
+          ${getReceiptHeaderHtml(`SEGUNDA VIA - CUPOM NAO FISCAL<br/>Venda #${venda.id} - ${new Date(venda.data_venda).toLocaleString('pt-BR')}`)}
           <div class="divider"></div>
           
           <div class="bold row">
@@ -185,11 +240,7 @@ export default function Relatorios() {
             ` : ''}
           `}
           
-          <div class="divider"></div>
-          <div class="text-center" style="margin-top:10px;">
-            <span class="bold">Reimpressao de Cupom</span><br/>
-            <span>Operador: ${venda.usuario_nome}</span>
-          </div>
+          ${getReceiptFooterHtml(venda.usuario_nome)}
         </body>
       </html>
     `;
@@ -237,12 +288,7 @@ export default function Relatorios() {
           </style>
         </head>
         <body>
-          <div class="text-center">
-            <span class="bold">MERCADO & CONVENIENCIA</span><br/>
-            <div class="divider"></div>
-            <span class="bold">SEGUNDA VIA - COMPROVANTE FECHAMENTO</span><br/>
-            <span>Caixa #${sessao.id} - ${new Date(sessao.data_fechamento || Date.now()).toLocaleString('pt-BR')}</span>
-          </div>
+          ${getReceiptHeaderHtml(`SEGUNDA VIA - COMPROVANTE FECHAMENTO<br/>Caixa #${sessao.id} - ${new Date(sessao.data_fechamento || Date.now()).toLocaleString('pt-BR')}`)}
           <div class="divider"></div>
           
           <div class="row">
@@ -416,12 +462,7 @@ export default function Relatorios() {
           </style>
         </head>
         <body>
-          <div class="text-center">
-            <span class="bold">MERCADO & CONVENIENCIA</span><br/>
-            <div class="divider"></div>
-            <span class="bold">RELATORIO FINANCEIRO DE VENDAS</span><br/>
-            <span>Periodo: ${periodStr}</span>
-          </div>
+          ${getReceiptHeaderHtml(`RELATORIO FINANCEIRO DE VENDAS<br/>Periodo: ${periodStr}`)}
           <div class="divider"></div>
           
           <div class="row">

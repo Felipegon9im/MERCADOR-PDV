@@ -137,6 +137,68 @@ export default function PDV() {
 
   const barcodeInputRef = useRef(null);
 
+  const getReceiptHeaderHtml = (title = 'CUPOM NAO FISCAL') => {
+    const saved = localStorage.getItem('pdv_settings');
+    let logoHtml = '';
+    let nome = 'MERCADO & CONVENIENCIA';
+    let endereco = 'Rua do Mercado, 123 - Centro';
+    let telefone = '';
+    let cnpj = 'CNPJ: 12.345.678/0001-99';
+
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.logoBase64) {
+          logoHtml = `<img src="${parsed.logoBase64}" style="max-height: 60px; max-width: 150px; display: block; margin: 0 auto 8px auto; object-fit: contain;" /><br/>`;
+        }
+        if (parsed.cabecalhoNome?.trim()) {
+          nome = parsed.cabecalhoNome.trim().toUpperCase();
+        }
+        if (parsed.cabecalhoEndereco?.trim()) {
+          endereco = parsed.cabecalhoEndereco.trim();
+        }
+        if (parsed.cabecalhoTelefone?.trim()) {
+          telefone = parsed.cabecalhoTelefone.trim();
+        }
+      } catch (e) {
+        console.error("Erro ao parsear pdv_settings", e);
+      }
+    }
+
+    return `
+      <div class="text-center">
+        ${logoHtml}
+        <span class="bold">${nome}</span><br/>
+        <span>${endereco}</span><br/>
+        ${telefone ? `<span>Telefone: ${telefone}</span><br/>` : `<span>${cnpj}</span><br/>`}
+        <div class="divider"></div>
+        <span class="bold">${title}</span>
+      </div>
+    `;
+  };
+
+  const getReceiptFooterHtml = (operador) => {
+    const saved = localStorage.getItem('pdv_settings');
+    let msg = 'Obrigado pela preferencia!';
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.rodapeMensagem?.trim()) {
+          msg = parsed.rodapeMensagem.trim();
+        }
+      } catch (e) {
+        console.error("Erro ao ler rodape", e);
+      }
+    }
+    return `
+      <div class="divider"></div>
+      <div class="text-center" style="margin-top:10px;">
+        <span class="bold">${msg}</span><br/>
+        <span>Operador: ${operador}</span>
+      </div>
+    `;
+  };
+
   // Balança de Checkout integration states
   const [scaleConfig, setScaleConfig] = useState({ balancaAtiva: false, balancaPorta: 'SIMULACAO', balancaProtocolo: 'Toledo', balancaPesoSimulado: '1.500' });
   const [showWeighingModal, setShowWeighingModal] = useState(false);
@@ -389,12 +451,7 @@ export default function PDV() {
             </style>
           </head>
           <body>
-            <div class="text-center">
-              <span class="bold">MERCADO & CONVENIENCIA</span><br/>
-              <div class="divider"></div>
-              <span class="bold">COMPROVANTE DE FECHAMENTO</span><br/>
-              <span>Caixa #${activeSession.id} - ${new Date().toLocaleString('pt-BR')}</span>
-            </div>
+            ${getReceiptHeaderHtml(`COMPROVANTE DE FECHAMENTO<br/>Caixa #${activeSession.id} - ${new Date().toLocaleString('pt-BR')}`)}
             <div class="divider"></div>
             
             <div class="row">
@@ -647,8 +704,7 @@ export default function PDV() {
           </style>
         </head>
         <body>
-          <span class="bold">PAGAMENTO PIX</span><br/>
-          <span>Mercado & Conveniência</span><br/>
+          ${getReceiptHeaderHtml('PAGAMENTO PIX')}
           <div class="divider"></div>
           <span class="bold" style="font-size: 14px;">VALOR: R$ ${valor.toFixed(2)}</span><br/>
           <div class="qr-container">
@@ -1027,14 +1083,7 @@ export default function PDV() {
             </style>
           </head>
           <body>
-            <div class="text-center">
-              <span class="bold">MERCADO & CONVENIENCIA</span><br/>
-              <span>Rua do Mercado, 123 - Centro</span><br/>
-              <span>CNPJ: 12.345.678/0001-99</span><br/>
-              <div class="divider"></div>
-              <span class="bold">CUPOM NAO FISCAL</span><br/>
-              <span>Venda #${res.id} - ${new Date().toLocaleString('pt-BR')}</span>
-            </div>
+            ${getReceiptHeaderHtml(`CUPOM NAO FISCAL<br/>Venda #${res.id} - ${new Date().toLocaleString('pt-BR')}`)}
             <div class="divider"></div>
             
             <div class="bold row">
@@ -1146,11 +1195,7 @@ export default function PDV() {
               ` : ''}
             `}
             
-            <div class="divider"></div>
-            <div class="text-center" style="margin-top:10px;">
-              <span class="bold">Obrigado pela preferencia!</span><br/>
-              <span>Operador: ${user.name}</span>
-            </div>
+            ${getReceiptFooterHtml(user.name)}
           </body>
         </html>
       `;
