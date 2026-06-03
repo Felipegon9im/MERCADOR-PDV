@@ -602,16 +602,25 @@ export default function PDV() {
   // Handle PIX QR Code generation
   useEffect(() => {
     if (paymentMethod === 'pix') {
-      generatePix();
+      generatePix(total);
+    } else if (paymentMethod === 'misto') {
+      const pixVal = parseFloat(mistoValues.pix || 0);
+      if (pixVal > 0) {
+        generatePix(pixVal);
+      } else {
+        setPixQrCodeUrl('');
+      }
+    } else {
+      setPixQrCodeUrl('');
     }
-  }, [paymentMethod, total]);
+  }, [paymentMethod, total, mistoValues.pix]);
 
-  const generatePix = async () => {
+  const generatePix = async (valor = total) => {
     try {
       // Simulate/Generate PIX payloads using custom settings
       const payload = generatePixPayload({
         chave: pixSettings.chavePix,
-        valor: total,
+        valor: valor,
         beneficiario: pixSettings.beneficiario,
         cidade: pixSettings.cidade,
         txid: 'PDV' + Math.floor(1000 + Math.random() * 9000)
@@ -1551,6 +1560,28 @@ export default function PDV() {
                     <span className="text-xs font-bold uppercase">Misto Dividido</span>
                   </button>
                 </div>
+
+                {/* PIX QR Code card when PIX portion in Misto mode is positive */}
+                {paymentMethod === 'misto' && parseFloat(mistoValues.pix || 0) > 0 && (
+                  <div className="mt-4 p-3.5 bg-brand-dark/40 border border-brand-border/60 rounded-2xl flex items-center justify-between animate-in slide-in-from-bottom-2 duration-200">
+                    <div className="flex-1 pr-3 text-left">
+                      <span className="text-[10px] text-brand-success font-extrabold uppercase tracking-widest block leading-none mb-1">PIX QR Code Dividido</span>
+                      <span className="text-lg font-black text-white">R$ {parseFloat(mistoValues.pix).toFixed(2)}</span>
+                      <p className="text-[10px] text-gray-400 mt-1.5 leading-normal font-semibold">
+                        Aponte a câmera do celular para pagar esta parcela.
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white rounded-xl shrink-0 shadow-lg shadow-black/10">
+                      {pixQrCodeUrl ? (
+                        <img src={pixQrCodeUrl} alt="PIX QR Code" className="w-20 h-20 block select-text" />
+                      ) : (
+                        <div className="w-20 h-20 bg-gray-100 flex items-center justify-center text-[10px] text-gray-400 font-bold rounded-lg animate-pulse">
+                          Gerando...
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Action buttons */}
