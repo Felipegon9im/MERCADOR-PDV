@@ -774,7 +774,7 @@ export default function PDV() {
       let prod = allProducts.find(p => 
         p.codigo_barras === plu6 || p.codigo_barras === intPlu6 ||
         p.codigo_barras === plu5 || p.codigo_barras === intPlu5 ||
-        p.id === parseInt(plu6, 10) || p.id === parseInt(plu5, 10)
+        ((p.id === parseInt(plu6, 10) || p.id === parseInt(plu5, 10)) && (p.tipo_produto === 'KG' || p.unidade === 'KG'))
       );
       
       if (prod) {
