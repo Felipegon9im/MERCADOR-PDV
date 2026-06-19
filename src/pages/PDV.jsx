@@ -739,6 +739,29 @@ export default function PDV() {
 
     // Check if it is a dynamic scale printed EAN-13 barcode starting with '2'
     if (barcode.length === 13 && barcode.startsWith('2')) {
+      // First, check if there is a product with this exact full barcode in the database (static barcode starting with '2')
+      const exactProd = allProducts.find(p => p.codigo_barras === barcode);
+      
+      if (exactProd) {
+        const isKg = exactProd.tipo_produto === 'KG' || exactProd.unidade === 'KG';
+        if (isKg) {
+          setWeighingProduct(exactProd);
+          setShowWeighingModal(true);
+          setScaleWeight(0);
+          setScaleStatus('lendo');
+          setManualWeightInput('');
+          playBeep('success');
+        } else {
+          addItem(exactProd, 1);
+          setLastScannedItem({ ...exactProd, qty: 1 });
+          playBeep('success');
+        }
+        setBarcodeInput('');
+        setShowSearchDropdown(false);
+        focusBarcode();
+        return;
+      }
+
       const plu6 = barcode.substring(1, 7);
       const plu5 = barcode.substring(1, 6);
       const flag = barcode.substring(6, 7);
