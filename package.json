@@ -1,6 +1,6 @@
 {
   "name": "mercado-pdv",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Sistema PDV Completo e Offline-First para Mercado e Conveniência",
   "main": "main.js",
   "scripts": {

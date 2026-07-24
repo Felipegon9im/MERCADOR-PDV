@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import { Lock, User, KeyRound, ShieldAlert } from 'lucide-react';
-import loginBg from '../assets/login_bg.png';
+import { loginBg } from '../assets/login_bg.js';
 
 const profiles = [
   { username: 'admin', label: 'Administrador', color: 'border-indigo-500/30 text-indigo-400 bg-indigo-500/5 hover:bg-indigo-500/10' },
