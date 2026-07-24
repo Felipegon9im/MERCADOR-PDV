@@ -64,6 +64,8 @@ export default function Estoque() {
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [productToDelete, setProductToDelete] = useState(null);
+  const [originalBarcode, setOriginalBarcode] = useState('');
+  const [showBarcodeAlert, setShowBarcodeAlert] = useState(false);
 
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryControleEstoque, setNewCategoryControleEstoque] = useState(0);
@@ -253,6 +255,40 @@ export default function Estoque() {
     }
   };
 
+  const handleBarcodeChange = (val) => {
+    if (val.length === 13 && val.startsWith('2')) {
+      const plu = parseInt(val.substring(1, 7), 10).toString();
+      setOriginalBarcode(val);
+      setShowBarcodeAlert(true);
+      setCurrentProduct(prev => ({
+        ...prev,
+        codigo_barras: plu,
+        tipo_produto: 'KG',
+        unidade: 'KG'
+      }));
+    } else {
+      setCurrentProduct(prev => {
+        if (showBarcodeAlert && val !== prev.codigo_barras) {
+          setShowBarcodeAlert(false);
+        }
+        return {
+          ...prev,
+          codigo_barras: val
+        };
+      });
+    }
+  };
+
+  const handleUndoBarcodeExtraction = () => {
+    setCurrentProduct(prev => ({
+      ...prev,
+      codigo_barras: originalBarcode,
+      tipo_produto: 'UNIDADE',
+      unidade: 'UN'
+    }));
+    setShowBarcodeAlert(false);
+  };
+
   const openNewProductModal = () => {
     setCurrentProduct({
       id: null,
@@ -266,6 +302,8 @@ export default function Estoque() {
       unidade: 'UN',
       tipo_produto: 'UNIDADE'
     });
+    setOriginalBarcode('');
+    setShowBarcodeAlert(false);
     setShowProductModal(true);
   };
 
@@ -282,6 +320,8 @@ export default function Estoque() {
       unidade: prod.unidade || 'UN',
       tipo_produto: prod.tipo_produto || (prod.unidade === 'KG' ? 'KG' : 'UNIDADE')
     });
+    setOriginalBarcode('');
+    setShowBarcodeAlert(false);
     setShowProductModal(true);
   };
 
@@ -719,9 +759,23 @@ export default function Estoque() {
                     type="text"
                     placeholder="Ex: 7891234567890"
                     value={currentProduct.codigo_barras}
-                    onChange={(e) => setCurrentProduct({...currentProduct, codigo_barras: e.target.value})}
+                    onChange={(e) => handleBarcodeChange(e.target.value)}
                     className="w-full bg-brand-dark border border-brand-border focus:border-brand-accent rounded-xl py-3 px-4 text-xs font-semibold text-white outline-none"
                   />
+                  {showBarcodeAlert && (
+                    <div className="text-[10px] bg-brand-accent/10 border border-brand-accent/20 rounded-xl p-3 text-gray-300 flex flex-col space-y-1.5 mt-1.5">
+                      <span className="flex items-center space-x-1">
+                        <span>⚠️ Código de balança detectado! PLU <strong className="text-white font-extrabold">{currentProduct.codigo_barras}</strong> extraído e tipo definido como <strong className="text-brand-success font-extrabold">KG</strong>.</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleUndoBarcodeExtraction}
+                        className="text-brand-accent hover:text-brand-accentHover text-[10px] font-bold text-left underline self-start focus:outline-none"
+                      >
+                        Desfazer (manter 13 dígitos como Unidade)
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Category select */}
