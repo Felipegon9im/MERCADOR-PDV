@@ -142,6 +142,20 @@ export default function Login() {
           <p className="text-[10px] text-center text-gray-600 font-semibold uppercase mt-6 tracking-widest">
             Acesso local criptografado e 100% offline
           </p>
+
+          {/* Botão de Teste de Licença */}
+          <div className="mt-4 text-center">
+            <button
+              onClick={() => {
+                localStorage.removeItem('MERCADOPDV_LICENSE');
+                window.location.reload();
+              }}
+              className="text-[10px] text-gray-500 hover:text-brand-danger transition-colors font-bold uppercase tracking-wider underline cursor-pointer"
+              type="button"
+            >
+              Excluir Licença (Testar PIX)
+            </button>
+          </div>
         </div>
       </div>
     </div>

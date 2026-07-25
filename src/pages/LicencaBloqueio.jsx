@@ -290,7 +290,7 @@ export default function LicencaBloqueio({ currentLicenseStatus, machineId: passe
               {/* QR Code Image */}
               <div className="flex justify-center">
                 <img 
-                  src={`data:image/png;base64,${pixQrCodeImage}`} 
+                  src={pixQrCodeImage.startsWith('http') ? pixQrCodeImage : `data:image/png;base64,${pixQrCodeImage}`} 
                   alt="QR Code Pix"
                   className="w-48 h-48 rounded-2xl border border-brand-border bg-white p-2 shadow-lg shadow-indigo-500/5"
                 />
