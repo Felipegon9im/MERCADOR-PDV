@@ -1,13 +1,36 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
-import { Lock, User, KeyRound, ShieldAlert, Phone, Building2, CreditCard } from 'lucide-react';
+import { Lock, User, KeyRound, ShieldAlert, Phone, Building2, CreditCard, WifiOff, Layers, BarChart3, ShoppingBag } from 'lucide-react';
 import { loginBg } from '../assets/login_bg_premium';
 
 const profiles = [
   { username: 'admin', label: 'Administrador', color: 'border-indigo-500/30 text-indigo-400 bg-indigo-500/5 hover:bg-indigo-500/10' },
   { username: 'gerente', label: 'Gerente', color: 'border-amber-500/30 text-amber-400 bg-amber-500/5 hover:bg-amber-500/10' },
   { username: 'caixa', label: 'Operador Caixa', color: 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10' }
+];
+
+const systemFeatures = [
+  {
+    icon: <WifiOff size={16} />,
+    title: 'Operação Offline',
+    desc: 'Venda sem interrupções. Toda a base de dados é salva localmente e funciona sem internet.'
+  },
+  {
+    icon: <ShoppingBag size={16} />,
+    title: 'PDV Agilizado',
+    desc: 'Vendas rápidas com leitor de código de barras, balança acoplada e atalhos de teclado.'
+  },
+  {
+    icon: <Layers size={16} />,
+    title: 'Estoque Integrado',
+    desc: 'Controle em tempo real de entradas, saídas, grade de produtos e alertas de estoque crítico.'
+  },
+  {
+    icon: <BarChart3 size={16} />,
+    title: 'Fluxo & Fechamento',
+    desc: 'Relatórios diários, controle de sangria/suprimento e fechamento de caixa cego por operador.'
+  }
 ];
 
 export default function Login() {
@@ -38,17 +61,20 @@ export default function Login() {
 
   return (
     <div 
-      className="h-screen w-screen flex items-center justify-center bg-brand-dark bg-cover bg-center relative select-none"
+      className="min-h-screen w-screen flex flex-col items-center justify-between py-8 px-6 bg-brand-dark bg-cover bg-center relative select-none overflow-y-auto"
       style={{ backgroundImage: `url(${loginBg})` }}
     >
       {/* Backdrop blur overlay */}
       <div className="absolute inset-0 bg-brand-dark/65 backdrop-blur-[4px] pointer-events-none"></div>
 
+      {/* Spacer / Flex helper */}
+      <div className="hidden lg:block h-4"></div>
+
       {/* Main glassmorphism card */}
-      <div className="w-full max-w-md relative z-10 p-6">
+      <div className="w-full max-w-md relative z-10 p-4 my-auto">
         
         {/* Brand header */}
-        <div className="flex flex-col items-center justify-center mb-6 text-center">
+        <div className="flex flex-col items-center justify-center mb-5 text-center">
           <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-brand-accent to-pink-500 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-indigo-500/20 mb-3 animate-pulse">
             PDV
           </div>
@@ -155,7 +181,7 @@ export default function Login() {
         </div>
 
         {/* Brand Footer Info */}
-        <div className="mt-6 text-center text-[10px] text-gray-500 space-y-1.5 bg-brand-dark/30 rounded-2xl p-4 border border-white/5 backdrop-blur-sm">
+        <div className="mt-5 text-center text-[10px] text-gray-500 space-y-1.5 bg-brand-dark/30 rounded-2xl p-4 border border-white/5 backdrop-blur-sm">
           <div className="flex justify-center items-center space-x-2 text-gray-400 font-bold uppercase tracking-wider">
             <span>Desenvolvido por: G&G Tecnologia</span>
             <span>•</span>
@@ -173,6 +199,21 @@ export default function Login() {
             </span>
           </div>
         </div>
+      </div>
+
+      {/* System Features list at the bottom of the page */}
+      <div className="w-full max-w-5xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10 mt-6 lg:mt-2">
+        {systemFeatures.map((f, idx) => (
+          <div key={idx} className="glass-panel p-4 rounded-2xl border border-white/5 bg-brand-card/20 backdrop-blur-md flex items-start space-x-3 hover:scale-102 hover:border-brand-accent/20 transition-all duration-300">
+            <div className="p-2 rounded-lg bg-brand-accent/10 border border-brand-accent/20 text-brand-accent shrink-0">
+              {f.icon}
+            </div>
+            <div>
+              <h3 className="text-[10.5px] font-bold text-white uppercase tracking-wider">{f.title}</h3>
+              <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">{f.desc}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
