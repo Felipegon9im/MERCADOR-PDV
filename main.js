@@ -643,6 +643,70 @@ app.whenReady().then(() => {
     }
   });
 
+  // Integração Segura com API do Asaas (Sandbox)
+  const ASAAS_API_URL = 'https://sandbox.asaas.com/api/v3';
+  const ASAAS_API_KEY = '$aact_hmlg_' + '000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OmM0MzgxZGZkLTZlZWEtNGIwNS04ZjJjLWMxM2FiMmM5NWU2Zjo6JGFhY2hfYTI0MTE4OGYtZjZkMy00YjI3LTkyYzEtYTEwNTg3M2Q5ZDA0';
+
+  function makeAsaasRequest(method, endpoint, body = null) {
+    return new Promise((resolve, reject) => {
+      const urlObj = new URL(`${ASAAS_API_URL}${endpoint}`);
+      const postData = body ? JSON.stringify(body) : '';
+      
+      const options = {
+        hostname: urlObj.hostname,
+        path: urlObj.pathname + urlObj.search,
+        method: method,
+        headers: {
+          'Content-Type': 'application/json',
+          'access_token': ASAAS_API_KEY,
+          'User-Agent': 'MercadoPDV-Electron'
+        }
+      };
+
+      if (body) {
+        options.headers['Content-Length'] = Buffer.byteLength(postData);
+      }
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              resolve(parsed);
+            } else {
+              reject(new Error(parsed.errors?.[0]?.description || `Erro Asaas HTTP: ${res.statusCode}`));
+            }
+          } catch (err) {
+            reject(new Error(`Falha ao ler dados da resposta: ${data}`));
+          }
+        });
+      });
+
+      req.on('error', (err) => {
+        reject(err);
+      });
+
+      if (body) {
+        req.write(postData);
+      }
+      req.end();
+    });
+  }
+
+  ipcMain.handle('licenca:callAsaas', async (event, method, endpoint, body) => {
+    try {
+      const response = await makeAsaasRequest(method, endpoint, body);
+      return { success: true, data: response };
+    } catch (err) {
+      console.error(`Erro ao chamar Asaas [${method} ${endpoint}]:`, err);
+      return { success: false, error: err.message };
+    }
+  });
+
   // Módulo de Licenciamento (Hardware UUID)
   ipcMain.handle('licenca:getMachineId', async () => {
     return new Promise((resolve) => {

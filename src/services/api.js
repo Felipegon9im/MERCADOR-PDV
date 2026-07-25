@@ -223,6 +223,39 @@ const api = {
       if (window.api && window.api.licenca) return window.api.licenca.getMachineId();
       console.warn("Electron License API not found. Mocking Machine ID in browser.");
       return 'MERCADOPDV-DEVELOPER-MOCK-UUID-12345';
+    },
+    callAsaas: async (method, endpoint, body) => {
+      if (window.api && window.api.licenca && window.api.licenca.callAsaas) {
+        return window.api.licenca.callAsaas(method, endpoint, body);
+      }
+      console.warn(`[Asaas Mock] ${method} ${endpoint}`, body);
+      
+      // Simulate Asaas API responses for browser testing
+      if (endpoint === '/customers') {
+        return { success: true, data: { id: 'cus_mock123' } };
+      }
+      if (endpoint === '/payments') {
+        return { success: true, data: { id: 'pay_mock123' } };
+      }
+      if (endpoint.endsWith('/pixQrCode')) {
+        return {
+          success: true,
+          data: {
+            encodedImage: 'iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAYAAACtLSgWAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEgAACxIB0t1+/AAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAF6SURBVHic7dFBDQAwCACSwDf592yDD1zQISuQZCYAAGM9HwAAf1kQAQIiQEAECEgMhIAIEJAYCAERICALIkBAFkSAgCxIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGAgBESAgsSACBGRBBAjIgghIDISACBCQGfgALWwCC1l0KpwAAAABJRU5ErkJggg==',
+            payload: '00020101021226870014br.gov.bcb.pix2563mock-payload-copied-and-pasted-mercado-pdv-mensalidade'
+          }
+        };
+      }
+      if (endpoint.startsWith('/payments/pay_mock123')) {
+        // Automatically approve payment after 5 seconds of browser simulation
+        if (!window.mockPaymentStart) window.mockPaymentStart = Date.now();
+        const elapsed = Date.now() - window.mockPaymentStart;
+        if (elapsed > 5000) {
+          return { success: true, data: { status: 'CONFIRMED' } };
+        }
+        return { success: true, data: { status: 'PENDING' } };
+      }
+      return { success: true, data: {} };
     }
   }
 };

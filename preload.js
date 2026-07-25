@@ -92,6 +92,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Sistema de Licenciamento
   licenca: {
-    getMachineId: () => ipcRenderer.invoke('licenca:getMachineId')
+    getMachineId: () => ipcRenderer.invoke('licenca:getMachineId'),
+    callAsaas: (method, endpoint, body) => ipcRenderer.invoke('licenca:callAsaas', method, endpoint, body)
   }
 });
